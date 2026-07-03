@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace local_wb_dashboard\local\source;
+namespace local_wb_dashboard\local\source\sources\reportbuilder;
 
 use core_reportbuilder\local\filters\date;
 use core_reportbuilder\local\filters\number;
@@ -25,16 +25,27 @@ use core_reportbuilder\permission;
 use local_wb_dashboard\local\dto\chart_data;
 use local_wb_dashboard\local\dto\chart_series;
 use local_wb_dashboard\local\dto\filter_constraint;
+use local_wb_dashboard\local\source\source_interface;
+use local_wb_dashboard\local\source\sources\reportbuilder\shaping\report_totals_shaping;
+use local_wb_dashboard\local\source\sources\reportbuilder\shaping\rows_shaping;
+use local_wb_dashboard\local\source\sources\reportbuilder\shaping\shaping_strategy;
+use local_wb_dashboard\local\source\sources\reportbuilder\shaping\two_report_delta_shaping;
 use moodle_exception;
 
 /**
  * Report Builder data source.
  *
- * Two shaping modes:
+ * Three shaping modes, each a {@see shaping_strategy} that declares which params
+ * it handles and delegates to the matching shaping method here:
+ *  - Multi-report totals (reports): one data point per report (its row count or a
+ *    summed value field), suited to comparing reports side by side.
  *  - Two-report delta (idbase/fieldbase + idtotal/fieldtotal): a single value and
  *    its remainder, suited to doughnut/progress ("logged vs remaining").
  *  - Rows (report/categoryfield/valuefield [+ stackfield]): one data point per row,
  *    optionally grouped into stacks, suited to bar/stacked/horizontal charts.
+ *
+ * fetch() picks the first strategy whose supports() matches, replacing an
+ * if/if/if chain so new shaping modes are added as a strategy, not a branch.
  *
  * Filters are applied the report-native way: constraints are translated into the
  * report's own filter values (via Report Builder's user_filter_manager), applied
@@ -45,6 +56,17 @@ use moodle_exception;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class reportbuilder_source implements source_interface {
+    /**
+     * Shaping strategies in priority order: the first whose supports() matches wins.
+     *
+     * @var class-string<shaping_strategy>[]
+     */
+    private const SHAPING_STRATEGIES = [
+        report_totals_shaping::class,
+        two_report_delta_shaping::class,
+        rows_shaping::class,
+    ];
+
     #[\Override]
     public static function get_name(): string {
         return 'reportbuilder';
@@ -87,56 +109,14 @@ class reportbuilder_source implements source_interface {
 
     #[\Override]
     public function fetch(array $sourceparams, array $constraints): chart_data {
-        if (!empty($sourceparams['reports'])) {
-            return $this->fetch_report_totals($sourceparams, $constraints);
-        }
-        if (!empty($sourceparams['idbase']) && !empty($sourceparams['idtotal'])) {
-            return $this->fetch_two_report_delta($sourceparams, $constraints);
-        }
-        $iscount = strtolower((string)($sourceparams['aggregation'] ?? '')) === 'count';
-        if (
-            !empty($sourceparams['report']) && !empty($sourceparams['categoryfield'])
-            && (!empty($sourceparams['valuefield']) || $iscount)
-        ) {
-            return $this->fetch_rows($sourceparams, $constraints);
+        foreach (self::SHAPING_STRATEGIES as $strategyclass) {
+            /** @var shaping_strategy $strategy */
+            $strategy = new $strategyclass();
+            if ($strategy->supports($sourceparams)) {
+                return $strategy->shape($this, $sourceparams, $constraints);
+            }
         }
         throw new moodle_exception('error:invalidreportid', 'local_wb_dashboard');
-    }
-
-    /**
-     * The report ids referenced by the given params.
-     *
-     * @param array $params
-     * @return int[]
-     */
-    private function report_ids(array $params): array {
-        $ids = [];
-        foreach (['idbase', 'idtotal', 'report'] as $key) {
-            if (!empty($params[$key])) {
-                $ids[(int)$params[$key]] = (int)$params[$key];
-            }
-        }
-        foreach ($this->parse_report_list($params['reports'] ?? '') as $id) {
-            $ids[$id] = $id;
-        }
-        return array_values($ids);
-    }
-
-    /**
-     * Parse a comma-separated list of report ids.
-     *
-     * @param string $raw
-     * @return int[]
-     */
-    private function parse_report_list(string $raw): array {
-        $ids = [];
-        foreach (explode(',', $raw) as $part) {
-            $id = (int)trim($part);
-            if ($id > 0) {
-                $ids[$id] = $id;
-            }
-        }
-        return array_values($ids);
     }
 
     /**
@@ -147,7 +127,7 @@ class reportbuilder_source implements source_interface {
      * @param filter_constraint[] $constraints
      * @return chart_data
      */
-    private function fetch_report_totals(array $params, array $constraints): chart_data {
+    public function fetch_report_totals(array $params, array $constraints): chart_data {
         $reportids = $this->parse_report_list((string)$params['reports']);
         if (empty($reportids)) {
             throw new moodle_exception('error:invalidreportid', 'local_wb_dashboard');
@@ -186,7 +166,7 @@ class reportbuilder_source implements source_interface {
      * @param filter_constraint[] $constraints
      * @return chart_data
      */
-    private function fetch_two_report_delta(array $params, array $constraints): chart_data {
+    public function fetch_two_report_delta(array $params, array $constraints): chart_data {
         $base = $this->extract_value((int)$params['idbase'], (string)$params['fieldbase'], $constraints);
         $total = $this->extract_value((int)$params['idtotal'], (string)$params['fieldtotal'], $constraints);
         $remaining = max(0.0, $total - $base);
@@ -211,7 +191,7 @@ class reportbuilder_source implements source_interface {
      * @param filter_constraint[] $constraints
      * @return chart_data
      */
-    private function fetch_rows(array $params, array $constraints): chart_data {
+    public function fetch_rows(array $params, array $constraints): chart_data {
         $reportid = (int)$params['report'];
         $categoryfield = (string)$params['categoryfield'];
         $valuefield = isset($params['valuefield']) ? (string)$params['valuefield'] : '';
@@ -275,6 +255,42 @@ class reportbuilder_source implements source_interface {
         }
 
         return $data;
+    }
+
+    /**
+     * The report ids referenced by the given params.
+     *
+     * @param array $params
+     * @return int[]
+     */
+    private function report_ids(array $params): array {
+        $ids = [];
+        foreach (['idbase', 'idtotal', 'report'] as $key) {
+            if (!empty($params[$key])) {
+                $ids[(int)$params[$key]] = (int)$params[$key];
+            }
+        }
+        foreach ($this->parse_report_list($params['reports'] ?? '') as $id) {
+            $ids[$id] = $id;
+        }
+        return array_values($ids);
+    }
+
+    /**
+     * Parse a comma-separated list of report ids.
+     *
+     * @param string $raw
+     * @return int[]
+     */
+    private function parse_report_list(string $raw): array {
+        $ids = [];
+        foreach (explode(',', $raw) as $part) {
+            $id = (int)trim($part);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        return array_values($ids);
     }
 
     /**

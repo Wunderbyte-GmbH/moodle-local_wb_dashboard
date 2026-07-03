@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace local_wb_dashboard\local\source;
+namespace local_wb_dashboard\local\source\sources\reportbuilder;
 
 use core_reportbuilder\manager;
 use core_reportbuilder\table\custom_report_table_view;

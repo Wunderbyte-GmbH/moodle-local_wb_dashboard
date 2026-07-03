@@ -16,6 +16,7 @@
 
 namespace local_wb_dashboard\local\source;
 
+use local_wb_dashboard\local\source\sources\reportbuilder\reportbuilder_source;
 use moodle_exception;
 
 /**
