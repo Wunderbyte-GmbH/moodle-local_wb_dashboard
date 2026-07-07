@@ -23,11 +23,12 @@ use admin_settingpage;
 /**
  * Plugin-management metadata for the dashboard palette subplugin type.
  *
- * Core resolves this class for the `wbdashboardpalette` type. It only supplies
+ * Core resolves this class for the `wbdashboardpalette` type. It supplies the
  * management behaviour; the palette's colours live in each subplugin's own class
- * (see {@see wbdashboardpalette_interface}). Inheriting base::load_settings()
- * means each palette's settings.php (its colour pickers) is auto-loaded into the
- * admin tree.
+ * (see {@see wbdashboardpalette_interface}). Core does not load settings for a
+ * custom subplugin type automatically, so the parent plugin's settings.php walks
+ * the installed palettes and calls {@see self::load_settings()} on each, which
+ * includes that palette's settings.php (its colour pickers) into the admin tree.
  *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
@@ -46,6 +47,11 @@ class wbdashboardpalette extends base {
     public function is_uninstall_allowed() {
         // The bundled standard palette is the guaranteed fallback and cannot be removed.
         return $this->name !== self::DEFAULT_PALETTE;
+    }
+
+    #[\Override]
+    public function get_settings_section_name() {
+        return 'wbdashboardpalette_' . $this->name;
     }
 
     #[\Override]

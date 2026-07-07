@@ -27,7 +27,14 @@ defined('MOODLE_INTERNAL') || die();
 use local_wb_dashboard\local\palette\palette_manager;
 
 if ($hassiteconfig) {
-    $settings = new admin_settingpage('local_wb_dashboard', get_string('pluginname', 'local_wb_dashboard'));
+    // Group the dashboard's own settings and every palette's colour pickers under
+    // a single category, so they read as one coherent area in the admin tree.
+    $ADMIN->add('localplugins', new admin_category(
+        'local_wb_dashboard',
+        get_string('pluginname', 'local_wb_dashboard')
+    ));
+
+    $settings = new admin_settingpage('local_wb_dashboard_settings', get_string('generalsettings', 'admin'));
 
     // Choose the active palette from the installed palette subplugins. Each
     // palette supplies the chart colour scheme and (optionally) its own CSS.
@@ -39,5 +46,12 @@ if ($hassiteconfig) {
         palette_manager::available()
     ));
 
-    $ADMIN->add('localplugins', $settings);
+    $ADMIN->add('local_wb_dashboard', $settings);
+
+    // Core does not auto-load settings for a custom subplugin type, so each
+    // installed palette's own settings.php (its colour pickers) is added into
+    // this category as its own page.
+    foreach (\core_plugin_manager::instance()->get_plugins_of_type('wbdashboardpalette') as $palette) {
+        $palette->load_settings($ADMIN, 'local_wb_dashboard', $hassiteconfig);
+    }
 }
