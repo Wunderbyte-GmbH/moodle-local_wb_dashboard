@@ -28,9 +28,22 @@ import Ajax from 'core/ajax';
 const URL_PREFIX = 'ldf_';
 const DEBOUNCE_MS = 300;
 
+/**
+ * Events dispatched on registered control elements. Exposed on the default
+ * export (not as a named export — the AMD build returns only the default).
+ *
+ * @type {{reflect: String}} reflect - the bus wrote a new value into the
+ *     control (from a sibling control, URL or cache); widgets wrapping the
+ *     control (e.g. the region map) should repaint from control.value.
+ */
+const eventTypes = {
+    reflect: 'local_wb_dashboard_filterbus/reflect',
+};
+
 // Page-singleton state.
 const state = {};
 const charts = [];
+const controls = {};
 let pageid = 'default';
 let urlLoaded = false;
 let persistTimer = null;
@@ -102,14 +115,36 @@ const notify = (key) => {
 };
 
 /**
+ * Reflect a value into every other control registered for the key, so
+ * multiple controls bound to the same key (e.g. a region select and a region
+ * map) stay in sync. Dispatches the reflect event — never a change event,
+ * which would loop back into the bus.
+ *
+ * @param {String} key
+ * @param {String} value
+ * @param {HTMLElement|null} origin The control the value came from.
+ */
+const syncControls = (key, value, origin) => {
+    (controls[key] || []).forEach((control) => {
+        if (control === origin || control.value === value) {
+            return;
+        }
+        control.value = value;
+        control.dispatchEvent(new CustomEvent(eventTypes.reflect));
+    });
+};
+
+/**
  * Handle a control value change.
  *
  * @param {String} key
  * @param {String} type
  * @param {String} value
+ * @param {HTMLElement} origin The control that changed.
  */
-const handleChange = (key, type, value) => {
+const handleChange = (key, type, value, origin) => {
     state[key] = {value: value, type: type};
+    syncControls(key, value, origin);
     updateUrl(key, value);
     persist();
     notify(key);
@@ -133,8 +168,11 @@ const debounce = (fn, wait) => {
 };
 
 export default {
+    eventTypes: eventTypes,
+
     /**
-     * Register a filter control element (by id) with the bus.
+     * Register a filter control element (by id) with the bus. Several controls
+     * may register the same key; they act as one filter and are kept in sync.
      *
      * @param {String} controlId
      */
@@ -152,16 +190,26 @@ export default {
         const type = wrapper.dataset.filterType;
         pageid = wrapper.dataset.pageid || pageid;
 
-        // URL wins over the server-rendered (cache) value.
-        if (state[key] && typeof state[key].value !== 'undefined' && urlLoaded &&
-            new URLSearchParams(window.location.search).has(URL_PREFIX + key)) {
-            control.value = state[key].value;
-            state[key].type = type;
+        // URL state and an already-registered control for the same key win
+        // over this control's server-rendered (cache) value.
+        const fromurl = new URLSearchParams(window.location.search).has(URL_PREFIX + key);
+        const registered = controls[key] || [];
+        if (state[key] && typeof state[key].value !== 'undefined' && (fromurl || registered.length > 0)) {
+            if (registered.length === 0) {
+                // Replace the placeholder type stamped while reading the URL.
+                state[key].type = type;
+            }
+            if (control.value !== state[key].value) {
+                control.value = state[key].value;
+                control.dispatchEvent(new CustomEvent(eventTypes.reflect));
+            }
         } else {
             state[key] = {value: control.value, type: type};
         }
+        controls[key] = registered;
+        controls[key].push(control);
 
-        const onChange = debounce(() => handleChange(key, type, control.value), DEBOUNCE_MS);
+        const onChange = debounce(() => handleChange(key, type, control.value, control), DEBOUNCE_MS);
         control.addEventListener('change', onChange);
         control.addEventListener('input', onChange);
     },

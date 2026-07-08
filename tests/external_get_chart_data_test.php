@@ -117,6 +117,42 @@ final class external_get_chart_data_test extends \advanced_testcase {
         $this->assertGreaterThanOrEqual(2, $counts[0]);
     }
 
+    public function test_filter_key_matches_custom_field_shortname(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->getDataGenerator()->create_custom_profile_field(
+            ['shortname' => 'region', 'name' => 'Region', 'datatype' => 'text']);
+        $this->getDataGenerator()->create_user(
+            ['firstname' => 'Ann', 'lastname' => 'One', 'profile_field_region' => 'LAZIO']);
+        $this->getDataGenerator()->create_user(
+            ['firstname' => 'Bob', 'lastname' => 'Two', 'profile_field_region' => 'PUGLIA']);
+
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $rbgenerator->create_report(['name' => 'Regions', 'source' => users::class, 'default' => 0]);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:fullname']);
+        $rbgenerator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:profilefield_region']);
+
+        // The page filter key is the bare field shortname, exactly as a map (or
+        // select) control emits it — not the report's "profilefield_"-prefixed name.
+        $result = get_chart_data::execute(
+            'reportbuilder',
+            'bar',
+            $this->pairs([
+                'report' => $report->get('id'),
+                'categoryfield' => 'user:fullname',
+                'aggregation' => 'count',
+            ]),
+            [['key' => 'region', 'type' => 'map', 'value' => 'LAZIO']],
+            '',
+            ''
+        );
+
+        $config = json_decode($result['payload'], true);
+        $this->assertSame(['Ann One'], $config['data']['labels']);
+    }
+
     public function test_unknown_source_throws(): void {
         $this->resetAfterTest();
         $this->setAdminUser();

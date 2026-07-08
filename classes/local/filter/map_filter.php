@@ -30,6 +30,11 @@ use renderer_base;
  * the id remap live in data/italy_regions.json — edit the "value" there if your
  * dataset stores the region under a different string.
  *
+ * The map can stand alone or share its key with any other filter control —
+ * e.g. [chartfilter key=region type=select ...] plus [chartfilter key=region
+ * type=map] anywhere else on the page act as one "region" filter, and the
+ * filter bus keeps all controls of a key in sync in both directions.
+ *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -41,11 +46,6 @@ class map_filter extends base_filter {
     #[\Override]
     public function get_type(): string {
         return 'map';
-    }
-
-    #[\Override]
-    public function get_template(): string {
-        return 'local_wb_dashboard/chartfilter';
     }
 
     #[\Override]

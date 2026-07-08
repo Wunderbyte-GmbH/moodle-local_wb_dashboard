@@ -69,16 +69,35 @@ class reportbuilder_source implements option_provider_interface, shapable_source
         foreach ($this->report_ids($sourceparams) as $reportid) {
             $report = manager::get_report_from_id($reportid);
             foreach ($report->get_active_filters() as $filter) {
-                $uid = $filter->get_unique_identifier();
-                $keys[$uid] = $uid;
-                // Also expose the short name after the entity prefix as a friendly key.
-                if (($pos = strpos($uid, ':')) !== false) {
-                    $short = substr($uid, $pos + 1);
-                    $keys[$short] = $short;
+                foreach (self::filter_aliases($filter->get_unique_identifier()) as $alias) {
+                    $keys[$alias] = $alias;
                 }
             }
         }
         return array_values($keys);
+    }
+
+    /**
+     * All logical keys a report filter answers to: the full unique identifier,
+     * the friendly name after the entity prefix and — for custom field and
+     * user profile field filters — the bare field shortname, mirroring how
+     * {@see reporthandler::resolve_field_name} resolves columns.
+     *
+     * @param string $uid The filter's unique identifier (e.g. "course:customfield_region").
+     * @return string[] Aliases in original case (e.g. the uid, "customfield_region", "region").
+     */
+    private static function filter_aliases(string $uid): array {
+        $aliases = [$uid];
+        if (($pos = strpos($uid, ':')) !== false) {
+            $short = substr($uid, $pos + 1);
+            $aliases[] = $short;
+            foreach (['customfield_', 'profilefield_'] as $prefix) {
+                if (strpos($short, $prefix) === 0 && strlen($short) > strlen($prefix)) {
+                    $aliases[] = substr($short, strlen($prefix));
+                }
+            }
+        }
+        return $aliases;
     }
 
     #[\Override]
@@ -123,9 +142,8 @@ class reportbuilder_source implements option_provider_interface, shapable_source
         $needle = strtolower($field);
 
         foreach ($report->get_active_filters() as $filter) {
-            $uid = $filter->get_unique_identifier();
-            $short = ($pos = strpos($uid, ':')) !== false ? substr($uid, $pos + 1) : $uid;
-            if (strtolower($uid) !== $needle && strtolower($short) !== $needle) {
+            $aliases = array_map('strtolower', self::filter_aliases($filter->get_unique_identifier()));
+            if (!in_array($needle, $aliases, true)) {
                 continue;
             }
             if (!is_a($filter->get_filter_class(), select::class, true)) {
@@ -270,13 +288,12 @@ class reportbuilder_source implements option_provider_interface, shapable_source
             return [];
         }
 
-        // Index the report's active filters by both full identifier and short name.
+        // Index the report's active filters by every alias they answer to
+        // (full identifier, short name, custom/profile field shortname).
         $byidentifier = [];
         foreach ($report->get_active_filters() as $filter) {
-            $uid = $filter->get_unique_identifier();
-            $byidentifier[strtolower($uid)] = $filter;
-            if (($pos = strpos($uid, ':')) !== false) {
-                $byidentifier[strtolower(substr($uid, $pos + 1))] = $filter;
+            foreach (self::filter_aliases($filter->get_unique_identifier()) as $alias) {
+                $byidentifier[strtolower($alias)] = $filter;
             }
         }
 

@@ -33,7 +33,7 @@ class filter_definition {
     /** @var string Logical filter key (shared page vocabulary). */
     public string $key;
 
-    /** @var string Filter UI type (select|date|text|number). */
+    /** @var string Filter UI type (select|date|text|number|map). */
     public string $type;
 
     /** @var array Filter config: label, options, default, ... */

@@ -20,10 +20,16 @@
  * (registered separately on the same input) handles URL state, persistence and
  * chart reloads. This module owns nothing but the map <-> input wiring.
  *
+ * The map may share its filter key with any other control on the page (e.g. a
+ * region select): the bus keeps all controls of a key in sync and announces
+ * externally-written values via its reflect event, on which the map repaints.
+ *
  * @module     local_wb_dashboard/regionmap
  * @copyright  2026 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+
+import Filterbus from 'local_wb_dashboard/filterbus';
 
 /**
  * Reflect the current filter value onto the map: mark the active region and
@@ -110,6 +116,10 @@ export default {
             path.addEventListener('mouseleave', () => reflect(input, paths, readout));
             path.addEventListener('blur', () => reflect(input, paths, readout));
         });
+
+        // Repaint whenever the bus writes a value into the input (URL/cache
+        // seeding, or a sibling control bound to the same filter key).
+        input.addEventListener(Filterbus.eventTypes.reflect, () => reflect(input, paths, readout));
 
         // The filter bus may have seeded the input from URL/cache state before us.
         reflect(input, paths, readout);

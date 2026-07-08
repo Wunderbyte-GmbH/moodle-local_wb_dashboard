@@ -27,8 +27,11 @@
     * value - Current value.
     * pageid - Page identifier for shared filter state.
     * islocked - The value is server-forced for this user: render it statically.
-    * isselect / isdate / istext / isnumber - Type flags (all false when locked).
+    * isselect / isdate / istext / isnumber / ismap - Type flags (all false when locked).
     * options - For select: list of {value, label, selected}.
+    * viewbox - For map: the SVG viewBox.
+    * regions - For map: list of {id, value, name, d, selected}.
+    * valuename - For map: display name of the selected region ('' when none).
     * palettename - Active palette name; added as a wb-palette-NAME scope class.
 
     Example context (json):
@@ -72,9 +75,9 @@
     {{/isnumber}}
     {{#ismap}}
         <input type="hidden" id="{{id}}" value="{{value}}" data-filter-control="1">
-        <p class="wb-region-readout" aria-live="polite" data-region="readout"
+        <p class="wb-region-readout{{#valuename}} active{{/valuename}}" aria-live="polite" data-region="readout"
            data-emptytext="{{#str}}mapfilter:noregion, local_wb_dashboard{{/str}}">
-            {{#value}}{{value}}{{/value}}{{^value}}{{#str}}mapfilter:noregion, local_wb_dashboard{{/str}}{{/value}}
+            {{#valuename}}{{valuename}}{{/valuename}}{{^valuename}}{{#str}}mapfilter:noregion, local_wb_dashboard{{/str}}{{/valuename}}
         </p>
         <div class="wb-region-map">
             <svg viewBox="{{viewbox}}" role="group" aria-label="{{#str}}mapfilter:maplabel, local_wb_dashboard{{/str}}">

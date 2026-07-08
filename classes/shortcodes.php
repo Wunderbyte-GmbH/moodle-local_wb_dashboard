@@ -114,7 +114,7 @@ class shortcodes {
         $context = $filter->export_for_template($PAGE->get_renderer('core'));
 
         if ($islocked) {
-            // Show the option label where one matches the forced value.
+            // Show the option/region label where one matches the forced value.
             $lockedvalue = $lockedvalues[$definition->key];
             $display = $lockedvalue;
             foreach ($context['options'] ?? [] as $option) {
@@ -123,8 +123,15 @@ class shortcodes {
                     break;
                 }
             }
+            foreach ($context['regions'] ?? [] as $region) {
+                if ((string)$region['value'] === $lockedvalue) {
+                    $display = (string)$region['name'];
+                    break;
+                }
+            }
             $context['value'] = $display;
             $context['options'] = [];
+            $context['regions'] = [];
         } else {
             // Prefill from persisted state (URL state overrides client-side).
             $context['value'] = page_filter_state::get_value(
@@ -140,10 +147,14 @@ class shortcodes {
                 unset($option);
             }
         }
-        // Reflect the prefilled value into the active map region.
+        // Reflect the prefilled value into the active map region and expose its
+        // display name for the readout.
         if (!empty($context['regions'])) {
             foreach ($context['regions'] as &$region) {
                 $region['selected'] = ((string)$region['value'] === (string)$context['value']);
+                if ($region['selected']) {
+                    $context['valuename'] = (string)$region['name'];
+                }
             }
             unset($region);
         }
@@ -155,6 +166,7 @@ class shortcodes {
         $context['isdate'] = !$islocked && ($definition->type === 'date');
         $context['istext'] = !$islocked && ($definition->type === 'text');
         $context['isnumber'] = !$islocked && ($definition->type === 'number');
+        $context['ismap'] = !$islocked && ($definition->type === 'map');
 
         return $OUTPUT->render_from_template('local_wb_dashboard/chartfilter', $context);
     }
