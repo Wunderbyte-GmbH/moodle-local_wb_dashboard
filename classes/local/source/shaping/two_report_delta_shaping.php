@@ -89,7 +89,9 @@ class two_report_delta_shaping implements shaping_strategy {
     private function extract_value(shapable_source $source, int $datasetid, string $field, array $constraints): float {
         $rows = $source->load_rows($datasetid, $constraints);
         if (empty($rows)) {
-            throw new moodle_exception('error:noreportdata', 'local_wb_dashboard');
+            // A report that ran but matched no rows (e.g. filtered to empty) is
+            // a legitimate zero for a single-value extraction, not an error.
+            return 0.0;
         }
         $row = $rows[0];
         $resolved = $source->resolve_field($datasetid, $field, $row);
