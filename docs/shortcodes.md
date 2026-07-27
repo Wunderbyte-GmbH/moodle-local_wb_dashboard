@@ -28,6 +28,7 @@ filter to be installed and enabled in the context where the content is shown.
 | `consumes` | comma-separated filter keys | *(all)* | Which page filter keys this chart reacts to. Omit to react to every filter the source can map. |
 | `pageid` | alphanumeric | `default` | Groups the chart with the filters and other charts that share the same `pageid`. |
 | `centertext` | `1`/`0` | `1` | **Doughnut only.** `0` hides the centre value/label text. |
+| `target` | number | *(automatic)* | Manual maximum of the value axis. For `progress` this is the goal the bar fills towards (e.g. `target=1000` for "users of 1000"); without it the bar's own total is the maximum, so the bar is always full. Also caps the axis on `bar`/`horizontalbar`/`stackedbar`; ignored by `doughnut`. |
 
 Any flag **not** in the table above is passed to the source as a *source parameter*
 (see §2) — unknown parameters are dropped server-side.
@@ -147,6 +148,13 @@ across its rows. Labels are the report names. Use this to compare "how many user
 [chart type=bar source=reportbuilder reports=6,3 aggregation=count title="Users per report"]
 ```
 
+Combined with `type=progress` and a manual `target`, a single report becomes a
+goal-progress bar — the row count fills the bar towards the configured goal:
+
+```
+[chart type=progress source=reportbuilder reports=6 aggregation=count target=1000 height=8 title="Registered users of 1000"]
+```
+
 ### Field names & values
 - `valuefield` must resolve to a **numeric** value; text coerces to `0`. Category and
   stack fields are treated as labels.
@@ -164,7 +172,7 @@ across its rows. Labels are the report names. Use this to compare "how many user
 | `bar` | categories × one or more series | Vertical bars. |
 | `horizontalbar` | categories × one or more series | Horizontal bars (`indexAxis: y`). |
 | `stackedbar` | categories × multiple series (use `stackfield`) | Grouped **stacked** bars. |
-| `progress` | one series of N segments + a total | Single horizontal stacked bar with a fixed maximum — a progress/percentage bar. |
+| `progress` | one series of N segments + a total | Single horizontal stacked bar with a fixed maximum — a progress/percentage bar. The maximum is, in order: an explicit `target` flag, an axis maximum provided by the shaping (two-report delta), else the series total. |
 
 `line` and `pie` are intentionally out of the v1 set (easy to add later).
 

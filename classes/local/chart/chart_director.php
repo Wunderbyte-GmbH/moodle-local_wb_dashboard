@@ -48,6 +48,13 @@ class chart_director {
             unset($dto->meta['centertext']);
         }
 
+        // A manual target overrides any axis maximum derived by the shaping, so
+        // e.g. a progress bar fills against a configured goal instead of its own
+        // total. Builders without a value axis (doughnut) ignore it.
+        if (!empty($displayopts['target']) && (float)$displayopts['target'] > 0) {
+            $dto->set_meta('axismax', (float)$displayopts['target']);
+        }
+
         $builder = $this->make_builder($type);
         $builder->set_data($dto)
             ->set_colors($displayopts['colors'] ?? [])

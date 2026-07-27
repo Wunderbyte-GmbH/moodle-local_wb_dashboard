@@ -30,7 +30,7 @@ namespace local_wb_dashboard\local\definition;
  */
 class chart_definition {
     /** Reserved shortcode keys handled by the plugin (everything else = source param). */
-    private const RESERVED = ['type', 'source', 'width', 'height', 'title', 'consumes', 'pageid'];
+    private const RESERVED = ['type', 'source', 'width', 'height', 'title', 'consumes', 'pageid', 'target'];
 
     /** @var string Source name (e.g. "reportbuilder"). */
     public string $source;
@@ -108,6 +108,8 @@ class chart_definition {
             // Doughnut centre text is on by default; centertext=0 hides it.
             'centertext' => array_key_exists('centertext', $args)
                 ? (bool)clean_param((string)$args['centertext'], PARAM_BOOL) : true,
+            // Manual value-axis maximum (e.g. a progress bar's goal); 0 = automatic.
+            'target' => isset($args['target']) ? max(0.0, (float)$args['target']) : 0.0,
         ];
 
         // Everything not reserved is a source parameter. Legacy colour args
@@ -191,6 +193,7 @@ class chart_definition {
             'sourceparams' => $pairs,
             'title'        => $this->displayopts['title'] ?? get_string('chart', 'local_wb_dashboard'),
             'centertext'   => $this->displayopts['centertext'] ?? true,
+            'target'       => (float)($this->displayopts['target'] ?? 0),
         ];
     }
 }

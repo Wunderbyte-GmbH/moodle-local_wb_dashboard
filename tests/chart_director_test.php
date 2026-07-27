@@ -148,6 +148,27 @@ final class chart_director_test extends \advanced_testcase {
         $this->assertEqualsWithDelta(10.0, $out['options']['scales']['x']['max'], 0.001);
     }
 
+    public function test_progress_manual_target_overrides_axis_max(): void {
+        $config = (new chart_director())->build('progress', $this->doughnut_dto(), ['target' => 1000.0]);
+        $out = $config->jsonSerialize();
+
+        // The manual target wins over the shaping-provided axismax (10) and the
+        // series total, so the bar fills 8/1000 instead of always being full.
+        $this->assertEqualsWithDelta(1000.0, $out['options']['scales']['x']['max'], 0.001);
+    }
+
+    public function test_progress_single_value_with_target(): void {
+        $dto = new chart_data();
+        $dto->set_labels(['Users']);
+        $dto->add_series(new chart_series('Users', [350.0]));
+
+        $config = (new chart_director())->build('progress', $dto, ['target' => 1000.0]);
+        $out = $config->jsonSerialize();
+
+        $this->assertEqualsWithDelta(1000.0, $out['options']['scales']['x']['max'], 0.001);
+        $this->assertSame([350.0], $out['data']['datasets'][0]['data']);
+    }
+
     public function test_unknown_type_throws(): void {
         $this->expectException(\moodle_exception::class);
         (new chart_director())->build('piechart3d', $this->multi_series_dto());

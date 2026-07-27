@@ -45,6 +45,30 @@ final class chart_definition_test extends \advanced_testcase {
         $this->assertSame(['report' => '3'], $definition->sourceparams);
     }
 
+    public function test_target_is_a_display_option_not_a_source_param(): void {
+        $definition = chart_definition::create_definition_from_shortcode_args([
+            'source' => 'reportbuilder',
+            'type' => 'progress',
+            'report' => '3',
+            'target' => '1000',
+        ]);
+
+        $this->assertSame(1000.0, $definition->displayopts['target']);
+        $this->assertSame(1000.0, $definition->to_wsargs()['target']);
+        // Not smuggled into the source params (and thus not into the chart id).
+        $this->assertArrayNotHasKey('target', $definition->sourceparams);
+
+        // Absent or invalid values fall back to 0 (= automatic).
+        $auto = chart_definition::create_definition_from_shortcode_args(
+            ['source' => 'reportbuilder', 'type' => 'progress', 'report' => '3']
+        );
+        $this->assertSame(0.0, $auto->displayopts['target']);
+        $negative = chart_definition::create_definition_from_shortcode_args(
+            ['source' => 'reportbuilder', 'type' => 'progress', 'report' => '3', 'target' => '-5']
+        );
+        $this->assertSame(0.0, $negative->displayopts['target']);
+    }
+
     public function test_chartid_is_deterministic(): void {
         $args = ['source' => 'reportbuilder', 'type' => 'bar', 'report' => '3'];
         $a = chart_definition::create_definition_from_shortcode_args($args)->chartid_base(42);

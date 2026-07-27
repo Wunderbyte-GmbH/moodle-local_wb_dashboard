@@ -155,6 +155,7 @@ const createController = (canvas) => {
             chartid: wsargs.chartid || '',
             title: wsargs.title || '',
             centertext: wsargs.centertext !== false,
+            target: wsargs.target || 0,
             filtervalues: Filterbus.valuesFor(consumes)
         };
         Ajax.call([{methodname: 'local_wb_dashboard_get_chart_data', args: args}])[0]

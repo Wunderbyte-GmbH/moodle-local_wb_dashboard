@@ -72,6 +72,7 @@ class get_chart_data extends external_api {
             'chartid' => new external_value(PARAM_ALPHANUMEXT, 'Stable chart id for per-chart settings', VALUE_DEFAULT, ''),
             'title' => new external_value(PARAM_TEXT, 'Chart title', VALUE_DEFAULT, ''),
             'centertext' => new external_value(PARAM_BOOL, 'Show doughnut centre text', VALUE_DEFAULT, true),
+            'target' => new external_value(PARAM_FLOAT, 'Manual value-axis maximum (0 = automatic)', VALUE_DEFAULT, 0.0),
         ]);
     }
 
@@ -85,6 +86,7 @@ class get_chart_data extends external_api {
      * @param string $chartid
      * @param string $title
      * @param bool $centertext
+     * @param float $target
      * @return array
      */
     public static function execute(
@@ -94,7 +96,8 @@ class get_chart_data extends external_api {
         array $filtervalues = [],
         string $chartid = '',
         string $title = '',
-        bool $centertext = true
+        bool $centertext = true,
+        float $target = 0.0
     ): array {
         $params = self::validate_parameters(self::execute_parameters(), [
             'source' => $source,
@@ -104,6 +107,7 @@ class get_chart_data extends external_api {
             'chartid' => $chartid,
             'title' => $title,
             'centertext' => $centertext,
+            'target' => $target,
         ]);
 
         require_login();
@@ -121,6 +125,7 @@ class get_chart_data extends external_api {
             'colors' => $colors,
             'title' => $params['title'],
             'centertext' => $params['centertext'],
+            'target' => $params['target'],
         ]);
 
         return ['payload' => json_encode($config->jsonSerialize())];
