@@ -85,12 +85,24 @@ Reads every row of one report; each row becomes one data point. An optional
 | `valuefield` | Field used as the **numeric** value (bar height). Required unless `aggregation=count`. |
 | `stackfield` | *(optional)* Field whose distinct values become separate stacked series. |
 | `aggregation` | *(optional)* `sum` (default) adds up `valuefield` per category; `count` tallies one per row (no `valuefield` needed). |
+| `top` | *(optional)* Keep only the N highest categories (a "top N"). Ranks by each category's total value (its stacked height when `stackfield` is used). Omit for all categories. |
+| `order` | *(optional)* Direction for `top`: `desc` (default) keeps the highest N, `asc` keeps the lowest N (a "bottom N"). No effect without `top`. |
 
 Best rendered as `bar`, `horizontalbar`, or `stackedbar` (with `stackfield`).
+`top`/`order` are **rows-mode only** — the delta and multi-report-totals modes are
+inherently bounded already.
 
 ```
 [chart type=bar        source=reportbuilder report=3 categoryfield=month valuefield=total width=40 height=24]
 [chart type=stackedbar source=reportbuilder report=3 categoryfield=month valuefield=total stackfield=status width=40 height=24]
+```
+
+**Top N** — the 5 categories with the highest total (drop `order` for the default
+`desc`, or set `order=asc` for the bottom 5):
+
+```
+[chart type=horizontalbar source=reportbuilder report=3 categoryfield=coursename valuefield=completions order=desc top=5 title="Top 5 courses"]
+[chart type=bar           source=reportbuilder report=3 categoryfield=country aggregation=count top=5 title="Top 5 countries by users"]
 ```
 
 **Counting rows** — for a report where each row is an entity (e.g. a user), count
@@ -284,9 +296,16 @@ Two date inputs (from/to) that publish a single `"from|to"` value under one
 included in full (up to 23:59:59). Locking a `daterange` key via *Locked
 filters* is not supported — locks force a single scalar value.
 
+Besides a literal `"from|to"` range, `default` accepts the relative keyword
+`last<N>months` (e.g. `last12months`), which resolves at render time to the
+range from N months ago until today, in the viewing user's timezone. It is the
+*initial* value like any default — once a viewer picks their own range, their
+choice is remembered instead.
+
 ```
 [chartfilter key=period type=daterange label="Period" pageid=demo]
 [chartfilter key=period type=daterange label="Period" default="2026-01-01|2026-06-30" pageid=demo]
+[chartfilter key=period type=daterange label="Period" default=last12months pageid=demo]
 ```
 
 ### Grouped select (`groupedselect`)

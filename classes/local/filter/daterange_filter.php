@@ -29,6 +29,9 @@ use renderer_base;
  * (Report Builder maps it to a DATE_RANGE from/to pair).
  *
  * The shortcode default uses the same format: default="2026-01-01|2026-06-30".
+ * Alternatively a relative keyword default="last12months" (any month count)
+ * resolves at render time to the range from N months ago until today, in the
+ * viewing user's timezone.
  *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
@@ -38,6 +41,25 @@ class daterange_filter extends base_filter {
     #[\Override]
     public function get_type(): string {
         return 'daterange';
+    }
+
+    /**
+     * The configured default, with the relative "last<N>months" keyword
+     * resolved to a concrete "from|to" ISO range: from N months before today
+     * until today, in the current user's timezone. Anything else is returned
+     * verbatim.
+     *
+     * @return string
+     */
+    #[\Override]
+    protected function get_default(): string {
+        $default = parent::get_default();
+        if (!preg_match('/^last(\d{1,3})months?$/i', trim($default), $matches)) {
+            return $default;
+        }
+        $today = new \DateTimeImmutable('now', \core_date::get_user_timezone_object());
+        $from = $today->modify('-' . (int)$matches[1] . ' months');
+        return $from->format('Y-m-d') . '|' . $today->format('Y-m-d');
     }
 
     /**

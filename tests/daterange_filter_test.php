@@ -93,6 +93,42 @@ final class daterange_filter_test extends \advanced_testcase {
         $this->assertSame('2026-06-30', $context['valueto']);
     }
 
+    public function test_relative_default_resolves_to_last_n_months(): void {
+        global $PAGE;
+        $filter = new daterange_filter('period', ['default' => 'last12months']);
+        $context = $filter->export_for_template($PAGE->get_renderer('core'));
+
+        $today = new \DateTimeImmutable('now', \core_date::get_user_timezone_object());
+        $this->assertSame($today->modify('-12 months')->format('Y-m-d'), $context['valuefrom']);
+        $this->assertSame($today->format('Y-m-d'), $context['valueto']);
+        $this->assertSame($context['valuefrom'] . '|' . $context['valueto'], $context['value']);
+
+        // The resolved range normalizes like any literal one.
+        [$from, $to] = $filter->normalize_value($context['value']);
+        $this->assertGreaterThan(0, $from);
+        $this->assertGreaterThan($from, $to);
+    }
+
+    public function test_relative_default_keyword_variants(): void {
+        global $PAGE;
+
+        // Case-insensitive, singular "month" accepted, any month count.
+        foreach (['Last6Months', 'last6month', 'LAST6MONTHS'] as $keyword) {
+            $filter = new daterange_filter('period', ['default' => $keyword]);
+            $context = $filter->export_for_template($PAGE->get_renderer('core'));
+            $today = new \DateTimeImmutable('now', \core_date::get_user_timezone_object());
+            $this->assertSame($today->modify('-6 months')->format('Y-m-d'), $context['valuefrom'], $keyword);
+            $this->assertSame($today->format('Y-m-d'), $context['valueto'], $keyword);
+        }
+
+        // Anything else stays verbatim.
+        foreach (['lastmonths', 'last12weeks', '2026-01-01|'] as $literal) {
+            $filter = new daterange_filter('period', ['default' => $literal]);
+            $context = $filter->export_for_template($PAGE->get_renderer('core'));
+            $this->assertSame($literal, $context['value'], $literal);
+        }
+    }
+
     public function test_factory_round_trip(): void {
         $this->assertTrue(filter_factory::exists('daterange'));
         $this->assertSame('daterange', filter_factory::create('daterange', 'period', [])->get_type());

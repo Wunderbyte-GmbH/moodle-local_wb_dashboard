@@ -61,6 +61,7 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
             'idbase', 'fieldbase', 'idtotal', 'fieldtotal',
             'report', 'categoryfield', 'valuefield', 'stackfield', 'aggregation',
             'reports',
+            'top', 'order',
         ];
     }
 

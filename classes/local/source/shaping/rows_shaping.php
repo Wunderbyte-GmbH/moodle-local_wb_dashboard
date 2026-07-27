@@ -62,6 +62,9 @@ class rows_shaping implements shaping_strategy {
         $stackfield = isset($params['stackfield']) ? (string)$params['stackfield'] : '';
         // The "count" option tallies one per row; "sum" (default) adds the value field.
         $iscount = strtolower((string)($params['aggregation'] ?? 'sum')) === 'count';
+        // Optional top-N: keep only the N highest (or lowest) categories.
+        $top = (int)($params['top'] ?? 0);
+        $order = (string)($params['order'] ?? 'desc');
 
         $rows = $source->load_rows($datasetid, $constraints);
         if (empty($rows)) {
@@ -118,6 +121,52 @@ class rows_shaping implements shaping_strategy {
             $data->set_meta('stacked', true);
         }
 
+        return $this->apply_topn($data, $top, $order);
+    }
+
+    /**
+     * Keep only the top (or bottom) N categories by total value.
+     *
+     * Ranks each category by the sum of its value across all series (its
+     * stacked bar height), so it behaves identically for single and stacked
+     * output, then reorders the labels and every series to that ranking and
+     * slices to $top. Ties keep first-seen order.
+     *
+     * @param chart_data $data
+     * @param int $top Positive category cap; 0 or less leaves the data untouched.
+     * @param string $order 'asc' keeps the bottom N; anything else (default) the top N.
+     * @return chart_data
+     */
+    private function apply_topn(chart_data $data, int $top, string $order): chart_data {
+        if ($top <= 0 || count($data->labels) <= $top) {
+            return $data;
+        }
+
+        // Rank each category by its total across all series (the stacked height).
+        $totals = [];
+        foreach (array_keys($data->labels) as $i) {
+            $sum = 0.0;
+            foreach ($data->series as $series) {
+                $sum += $series->data[$i] ?? 0.0;
+            }
+            $totals[$i] = $sum;
+        }
+
+        // Order the category indexes, keeping first-seen order for ties.
+        $asc = strtolower($order) === 'asc';
+        $indexes = array_keys($totals);
+        usort($indexes, function (int $a, int $b) use ($totals, $asc): int {
+            $cmp = $totals[$a] <=> $totals[$b];
+            $cmp = $asc ? $cmp : -$cmp;
+            return $cmp !== 0 ? $cmp : $a <=> $b;
+        });
+        $keep = array_slice($indexes, 0, $top);
+
+        // Remap the labels and every series onto the surviving order.
+        $data->labels = array_values(array_map(fn(int $i): string => $data->labels[$i], $keep));
+        foreach ($data->series as $series) {
+            $series->data = array_values(array_map(fn(int $i): float => $series->data[$i] ?? 0.0, $keep));
+        }
         return $data;
     }
 }
