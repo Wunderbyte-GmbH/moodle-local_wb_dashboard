@@ -38,7 +38,7 @@ class toplist_definition {
     /** Reserved shortcode keys handled by the plugin (everything else = source param). */
     private const RESERVED = [
         'source', 'top', 'order', 'barfield', 'bartotalfield', 'max',
-        'decimals', 'suffix', 'title', 'consumes', 'pageid',
+        'decimals', 'suffix', 'title', 'consumes', 'pageid', 'fixedfilters', 'details', 'bars',
     ];
 
     /** Hard cap for the number of rows a list may request. */
@@ -58,6 +58,9 @@ class toplist_definition {
 
     /** @var string Page identifier the list's filter state belongs to. */
     public string $pageid;
+
+    /** @var array Fixed filter values pinned on this instance (filtervalues triples). */
+    public array $fixedfilters = [];
 
     /**
      * Constructor.
@@ -98,10 +101,16 @@ class toplist_definition {
 
         $consumes = [];
         if (!empty($args['consumes'])) {
-            foreach (explode(',', $args['consumes']) as $key) {
-                $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
-                if ($key !== '') {
-                    $consumes[] = $key;
+            // A value of "none" isolates the instance from every page filter
+            // (empty consumes means "react to all keys" — the opposite).
+            if (strtolower(trim((string)$args['consumes'])) === 'none') {
+                $consumes = ['__none__'];
+            } else {
+                foreach (explode(',', $args['consumes']) as $key) {
+                    $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
+                    if ($key !== '') {
+                        $consumes[] = $key;
+                    }
                 }
             }
         }
@@ -131,6 +140,11 @@ class toplist_definition {
             'max'      => $max,
             'decimals' => isset($args['decimals']) ? max(0, min(6, (int)$args['decimals'])) : 0,
             'suffix'   => isset($args['suffix']) ? clean_param($args['suffix'], PARAM_TEXT) : '',
+            // Named detail template opening a per-row drill-down modal.
+            'details'  => isset($args['details']) ? clean_param($args['details'], PARAM_ALPHANUMEXT) : '',
+            // Render without the per-row progress bar when bars=0.
+            'bars'     => !array_key_exists('bars', $args)
+                || (bool)clean_param((string)$args['bars'], PARAM_BOOL),
         ];
 
         // Everything not reserved is a source parameter.
@@ -150,7 +164,9 @@ class toplist_definition {
             unset($sourceparams['valuefield']);
         }
 
-        return new self($source, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition = new self($source, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition->fixedfilters = fixed_filters::parse((string)($args['fixedfilters'] ?? ''));
+        return $definition;
     }
 
     /**
@@ -173,6 +189,7 @@ class toplist_definition {
             'max'          => $this->displayopts['max'],
             'decimals'     => $this->displayopts['decimals'],
             'suffix'       => $this->displayopts['suffix'],
+            'fixedfilters' => $this->fixedfilters,
         ];
     }
 
@@ -188,14 +205,19 @@ class toplist_definition {
     public function to_domid(): string {
         $params = $this->sourceparams;
         ksort($params);
-        $canonical = json_encode([
+        $identity = [
             'source'       => $this->source,
             'sourceparams' => $params,
             'top'          => $this->displayopts['top'],
             'order'        => $this->displayopts['order'],
             'barmode'      => $this->displayopts['barmode'],
             'max'          => $this->displayopts['max'],
-        ]);
+        ];
+        // Only fold fixed filters in when set, so pre-existing ids stay stable.
+        if (!empty($this->fixedfilters)) {
+            $identity['fixedfilters'] = $this->fixedfilters;
+        }
+        $canonical = json_encode($identity);
         return 'local-dashboard-toplist-' . substr(sha1((string)$canonical), 0, 12);
     }
 }

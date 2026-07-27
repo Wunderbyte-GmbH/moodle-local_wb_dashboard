@@ -492,13 +492,18 @@ completions, bar = completion percentage).
 | `max` | number | *(none)* | Fixed bar maximum: bar = value ÷ max (e.g. `max=5` for scores). |
 | `decimals` | 0-6 | `0` | Decimal places of the displayed value. |
 | `suffix` | text | *(none)* | Appended to the value verbatim (e.g. `suffix="/5"` → "4.3/5"). |
+| `bars` | `1` / `0` | `1` | `bars=0` renders the list **without** the per-row progress bar (rank, label and value only). |
 | `title` | text | *(none)* | Optional heading above the list. |
-| `consumes` | comma-separated filter keys | *(all)* | Which page filter keys the list reacts to. |
+| `consumes` | comma-separated filter keys, or `none` | *(all)* | Which page filter keys the list reacts to (`none` = isolated from all page filters, see §8). |
 | `pageid` | alphanumeric | `default` | Page identifier (same as the page's filters). |
+| `fixedfilters` | `key:value[;key:value]` | *(none)* | Filter values pinned on this list (see §8). |
+| `idfield` | field name | *(none)* | Report column holding each row's **raw id** (e.g. the course id). Required for `details`. |
+| `details` | template name | *(none)* | Adds a **"See details"** button per row that opens a drill-down modal (see §9). |
 
 **Bar resolution order:** `barfield` → `bartotalfield` → `max` → *relative*
 (no flag: the highest-ranked value gets a full bar, the rest scale to it).
 A zero divisor gives an empty bar; fills are clamped to 0-100%.
+With `bars=0` no bar is rendered at all and the bar flags are irrelevant.
 
 The row slots are server-rendered and constant; the JS only fills labels,
 values and bar widths. The wrapper id is deterministic
@@ -506,7 +511,101 @@ values and bar widths. The wrapper id is deterministic
 
 ---
 
-## 8. A full page example
+## 8. Fixed filters and filter isolation (`fixedfilters`, `consumes=none`)
+
+Both flags work on **every display shortcode** — `[chart]`, `[digits]` and
+`[toplist]`.
+
+**`fixedfilters`** pins literal filter values on one shortcode instance,
+independent of the page's `[chartfilter]` controls:
+
+```
+# This chart always shows course 5, whatever the page filters say.
+[chart type=bar source=reportbuilder report=12 categoryfield=month valuefield=views fixedfilters="courseid:5"]
+
+# Values are arbitrary strings, not just ids; several pairs separate with ";".
+[digits source=reportbuilder display=count report=7 fixedfilters="coursename:Mathematics 101;region:west"]
+```
+
+- Pairs are separated by `;`; key and value split at the **first** `:` (values
+  may contain further colons, but never `;` or `"`).
+- Each pair is applied through the report's **own** filter for that key, as an
+  equality match — exactly like a page filter value. Keys the report has no
+  filter for are silently ignored.
+- A fixed key **beats the page filter** of the same key; server-side
+  [locked filters](#locked-filters-per-user-forced-values) still beat both.
+- Two otherwise identical shortcodes that differ in `fixedfilters` get
+  different DOM/chart ids (they are different charts).
+
+**`consumes=none`** isolates an instance from *all* page filters. This is not
+the same as omitting `consumes` — an empty/omitted `consumes` means "react to
+**every** key". Use it together with `fixedfilters` when the instance must
+show exactly one pinned slice (e.g. inside a detail modal, §9).
+
+---
+
+## 9. Detail modals (per-row drill-down)
+
+A `[toplist]` can open a **modal with further reports about the clicked row**
+— e.g. a course list where "See details" opens per-course charts.
+
+Three parts:
+
+**1. The admin setting** *Site administration → Plugins → Local plugins →
+Wunderbyte Dashboard Charts → Detail templates* holds any number of **named
+templates**, each started by a `=== name ===` marker line. A template body is
+arbitrary HTML (divs, Bootstrap grid, inline styles) containing dashboard
+shortcodes. The placeholders `{{id}}` and `{{label}}` are replaced with the
+clicked row's raw id and label:
+
+```
+=== coursedetail ===
+<h3>{{label}}</h3>
+<div class="row">
+    <div class="col-md-6">[digits source=reportbuilder display=count report=12 consumes=none fixedfilters="courseid:{{id}}" label="Enrolments"]</div>
+    <div class="col-md-6">[toplist source=reportbuilder report=14 categoryfield=username valuefield=score top=3 consumes=none fixedfilters="courseid:{{id}}" title="Top users"]</div>
+</div>
+
+=== userdetail ===
+<h3>{{label}}</h3>
+[chart type=bar source=reportbuilder report=20 categoryfield=month valuefield=logins consumes=none fixedfilters="userid:{{id}}"]
+```
+
+**2. The toplist opts in** with `details=<name>` plus `idfield=<column>` — the
+report column holding each row's raw id (add it as a column to the report,
+e.g. the course id):
+
+```
+[toplist source=reportbuilder report=12 categoryfield=coursefullname valuefield=completedsum top=10 idfield=courseid details=coursedetail title="Top courses"]
+```
+
+Different lists can use different template names (`details=userdetail`, …) or
+none — without `details` nothing changes. With `details` but a missing/empty
+`idfield` the buttons stay hidden.
+
+**3. On click** the modal body is rendered server-side (fragment API): the
+placeholders are substituted, the shortcodes filter expands the template, and
+every inner widget loads its data pinned to the clicked row via its
+`fixedfilters`.
+
+Worth knowing:
+
+- Give inner shortcodes `consumes=none` so the modal content ignores the
+  page's filter state (and `fixedfilters="…:{{id}}"` so it shows the clicked
+  entity).
+- Every inner shortcode still enforces its own report-view permission when
+  its data loads — a user without access to a drill-down report sees its
+  error/empty state, not its data.
+- Substituted values are sanitized (`"`, `[`, `]`, `;` and control characters
+  are stripped) so row data can never alter the template's shortcode syntax.
+- `[chartfilter]` controls are **not supported** inside detail templates
+  (they register on the page's filter bus).
+- The Shortcodes text filter must be enabled for content in the context, as
+  for any dashboard page.
+
+---
+
+## 10. A full page example
 
 ```
 [chartfilter key=period type=date label="From" pageid=team]
@@ -524,7 +623,7 @@ and chart above — each applying `period` through its own report's date filter.
 
 ---
 
-## 9. Per-chart colours (settings gear)
+## 11. Per-chart colours (settings gear)
 
 Charts follow the **active palette** by default. To recolour an individual chart,
 users with the `local/wb_dashboard:configurecharts` capability (managers by default)

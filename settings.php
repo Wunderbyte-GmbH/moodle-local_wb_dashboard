@@ -57,6 +57,16 @@ if ($hassiteconfig) {
         PARAM_RAW
     ));
 
+    // Named detail templates: the modal bodies opened by the [toplist]
+    // shortcode's per-row "see details" links (details=<name>).
+    $settings->add(new admin_setting_configtextarea(
+        'local_wb_dashboard/detailtemplates',
+        get_string('settings:detailtemplates', 'local_wb_dashboard'),
+        get_string('settings:detailtemplates_desc', 'local_wb_dashboard'),
+        '',
+        PARAM_RAW
+    ));
+
     $ADMIN->add('local_wb_dashboard', $settings);
 
     // Core does not auto-load settings for a custom subplugin type, so each

@@ -10,7 +10,7 @@
  * keep the control usable on its own. Everything is scoped to the map so it
  * cannot leak into the rest of the dashboard. */
 .wb-region-map {
-    --wb-region-fill: #f3ecdb;
+    --wb-region-fill: transparent;
     --wb-region-line: #c3b79b;
     --wb-region-hover: #e5b45b;
     --wb-region-selected: #6f8f7d;

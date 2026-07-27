@@ -142,6 +142,7 @@ class get_toplist_data extends external_api {
                 'label' => $row['label'],
                 'formatted' => format_float($row['value'], $decimals) . $params['suffix'],
                 'percent' => $row['percent'],
+                'rowid' => $row['id'] ?? '',
             ];
         }
         return ['rows' => $rows];
@@ -160,6 +161,8 @@ class get_toplist_data extends external_api {
                     'label' => new external_value(PARAM_TEXT, 'Row label'),
                     'formatted' => new external_value(PARAM_TEXT, 'Locale-formatted value with suffix'),
                     'percent' => new external_value(PARAM_FLOAT, 'Bar fill percentage (0-100)'),
+                    'rowid' => new external_value(PARAM_TEXT,
+                        'Raw category id for drill-down (idfield); empty when none', VALUE_DEFAULT, ''),
                 ]),
                 'Ranked rows, best first'
             ),

@@ -32,6 +32,10 @@
     * consumes - JSON array of filter keys this list reacts to.
     * wsargs - JSON object of web-service arguments (source, params, ...).
     * palettename - Active palette name; added as a wb-palette-NAME scope class.
+    * hasdetails - Whether rows carry a "see details" drill-down button.
+    * detailsname - Name of the detail template the modal renders.
+    * contextid - Context id the detail fragment is loaded for.
+    * hasbars - Whether rows render the progress bar (bars=0 hides it).
 
     Example context (json):
     {
@@ -41,7 +45,11 @@
         "pageid": "default",
         "consumes": "[]",
         "wsargs": "{}",
-        "palettename": "standard"
+        "palettename": "standard",
+        "hasdetails": true,
+        "detailsname": "coursedetail",
+        "contextid": 1,
+        "hasbars": true
     }
 }}
 <div class="local-dashboard-toplist wb-palette-{{palettename}}" id="{{domid}}"
@@ -49,6 +57,7 @@
      data-pageid="{{pageid}}"
      data-consumes="{{consumes}}"
      data-wsargs="{{wsargs}}"
+     {{#hasdetails}}data-details="{{detailsname}}" data-contextid="{{contextid}}"{{/hasdetails}}
      aria-busy="true">
     {{#title}}
     <div class="local-dashboard-toplist-title" id="{{domid}}-title">{{title}}</div>
@@ -60,11 +69,19 @@
             <span class="local-dashboard-toplist-rank" aria-hidden="true">{{rank}}</span>
             <span class="local-dashboard-toplist-body">
                 <span class="local-dashboard-toplist-label" data-region="toplist-label"></span>
+                {{#hasbars}}
                 <span class="local-dashboard-toplist-bar">
                     <span class="local-dashboard-toplist-bar-fill" data-region="toplist-bar" style="width: 0%;"></span>
                 </span>
+                {{/hasbars}}
             </span>
             <span class="local-dashboard-toplist-value" data-region="toplist-value"></span>
+            {{#hasdetails}}
+            <button type="button" class="local-dashboard-toplist-detail btn btn-link p-0"
+                    data-action="wb-dashboard-detail" style="display: none;">
+                {{#str}}toplist:seedetails, local_wb_dashboard{{/str}}
+            </button>
+            {{/hasdetails}}
         </li>
         {{/rows}}
     </ol>
@@ -77,4 +94,9 @@
 require(['local_wb_dashboard/toplist'], function(toplist) {
     toplist.init({{#quote}}{{domid}}{{/quote}});
 });
+{{#hasdetails}}
+require(['local_wb_dashboard/detail_modal'], function(detailModal) {
+    detailModal.init({{#quote}}{{domid}}{{/quote}});
+});
+{{/hasdetails}}
 {{/js}}

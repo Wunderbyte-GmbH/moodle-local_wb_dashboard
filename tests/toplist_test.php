@@ -136,6 +136,70 @@ final class toplist_test extends \advanced_testcase {
     }
 
     /**
+     * The new drill-down args: "details" is a display option, "idfield" a
+     * source param, "fixedfilters" parses into triples, consumes=none maps to
+     * the isolation sentinel — and everything lands in the wsargs.
+     */
+    public function test_definition_details_fixedfilters_and_consumes_none(): void {
+        $definition = toplist_definition::create_definition_from_shortcode_args([
+            'source' => 'reportbuilder',
+            'report' => '7',
+            'categoryfield' => 'coursename',
+            'valuefield' => 'completed',
+            'idfield' => 'courseid',
+            'details' => 'coursedetail',
+            'fixedfilters' => 'region:west;courseid:5',
+            'consumes' => 'none',
+        ]);
+
+        $this->assertSame('coursedetail', $definition->displayopts['details']);
+        $this->assertArrayNotHasKey('details', $definition->sourceparams);
+        $this->assertSame('courseid', $definition->sourceparams['idfield']);
+        $this->assertArrayNotHasKey('fixedfilters', $definition->sourceparams);
+        $this->assertSame([
+            ['key' => 'region', 'type' => 'select', 'value' => 'west'],
+            ['key' => 'courseid', 'type' => 'select', 'value' => '5'],
+        ], $definition->fixedfilters);
+        $this->assertSame(['__none__'], $definition->consumesfilters);
+        $this->assertSame($definition->fixedfilters, $definition->to_wsargs()['fixedfilters']);
+
+        // Malformed pairs are dropped, values may contain colons, first key wins.
+        $definition = toplist_definition::create_definition_from_shortcode_args([
+            'source' => 'reportbuilder',
+            'fixedfilters' => 'nocolon;name:Mathematics 101: Basics; :empty;key:first;key:second',
+        ]);
+        $this->assertSame([
+            ['key' => 'name', 'type' => 'select', 'value' => 'Mathematics 101: Basics'],
+            ['key' => 'key', 'type' => 'select', 'value' => 'first'],
+        ], $definition->fixedfilters);
+
+        // Two lists differing only in fixedfilters get different DOM ids; a
+        // list without them keeps its pre-existing id (identity unchanged).
+        $plain = toplist_definition::create_definition_from_shortcode_args([
+            'source' => 'reportbuilder', 'report' => '7',
+        ]);
+        $fixed = toplist_definition::create_definition_from_shortcode_args([
+            'source' => 'reportbuilder', 'report' => '7', 'fixedfilters' => 'courseid:5',
+        ]);
+        $this->assertNotSame($plain->to_domid(), $fixed->to_domid());
+    }
+
+    /**
+     * The reducer passes each row's raw id through, defaulting to ''.
+     */
+    public function test_reducer_passes_row_ids(): void {
+        $dto = $this->dto(['a', 'b', 'c'], [3, 1, 5]);
+        $dto->set_meta('rowids', ['10', '20', '30']);
+        $rows = toplist_reducer::reduce($dto, 2, 'desc', toplist_reducer::BAR_RELATIVE);
+        $this->assertSame(['c', 'a'], array_column($rows, 'label'));
+        $this->assertSame(['30', '10'], array_column($rows, 'id'));
+
+        // Without rowids meta the id is empty, never an error.
+        $rows = toplist_reducer::reduce($this->dto(['a'], [1]), 1, 'desc', toplist_reducer::BAR_RELATIVE);
+        $this->assertSame([''], array_column($rows, 'id'));
+    }
+
+    /**
      * The web service ranks real report rows and formats the values.
      */
     public function test_webservice_returns_ranked_rows(): void {
@@ -162,6 +226,38 @@ final class toplist_test extends \advanced_testcase {
         $this->assertSame('Alpha', $result['rows'][0]['label']);
         $this->assertSame('2', $result['rows'][0]['formatted']);
         $this->assertSame(100.0, $result['rows'][0]['percent']);
+        // Without idfield the rowid is empty.
+        $this->assertSame('', $result['rows'][0]['rowid']);
+    }
+
+    /**
+     * With idfield, the web service returns each row's raw id.
+     */
+    public function test_webservice_returns_rowid_with_idfield(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $alpha1 = $this->getDataGenerator()->create_user(['firstname' => 'Alpha']);
+        $alpha2 = $this->getDataGenerator()->create_user(['firstname' => 'Alpha']);
+        $this->getDataGenerator()->create_user(['firstname' => 'Beta']);
+
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $rbgenerator->create_report(['name' => 'Users', 'source' => users::class, 'default' => 0]);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:firstname']);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:username']);
+
+        $result = get_toplist_data::execute('reportbuilder', [
+            ['name' => 'report', 'value' => (string)$report->get('id')],
+            ['name' => 'categoryfield', 'value' => 'user:firstname'],
+            ['name' => 'idfield', 'value' => 'user:username'],
+            ['name' => 'aggregation', 'value' => 'count'],
+        ], [], 1);
+
+        $this->assertSame('Alpha', $result['rows'][0]['label']);
+        // The first-seen Alpha row supplies the id; either Alpha is acceptable
+        // (report order is not asserted here), Beta is not.
+        $this->assertContains($result['rows'][0]['rowid'], [$alpha1->username, $alpha2->username]);
     }
 
     /**
@@ -213,5 +309,76 @@ final class toplist_test extends \advanced_testcase {
             get_string('error:unknownsource', 'local_wb_dashboard', 'nope'),
             shortcodes::toplist('toplist', ['source' => 'nope'], null, (object)[], fn() => '')
         );
+    }
+
+    /**
+     * details= renders one hidden detail button per row slot plus the wrapper
+     * attributes the modal JS reads; an unknown template name is a clean
+     * config error; without details nothing detail-related renders.
+     */
+    public function test_shortcode_renders_detail_buttons(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        set_config('detailtemplates', "=== coursedetail ===\n<h3>{{label}}</h3>", 'local_wb_dashboard');
+
+        $args = [
+            'source' => 'reportbuilder',
+            'report' => '1',
+            'categoryfield' => 'coursename',
+            'valuefield' => 'completions',
+            'idfield' => 'courseid',
+            'top' => '3',
+        ];
+
+        $env = (object)['context' => null];
+        $html = shortcodes::toplist('toplist', $args + ['details' => 'coursedetail'], null, $env, fn() => '');
+        $this->assertSame(3, substr_count($html, 'data-action="wb-dashboard-detail"'));
+        $this->assertStringContainsString('data-details="coursedetail"', $html);
+        $this->assertStringContainsString('data-contextid="' . \context_system::instance()->id . '"', $html);
+
+        // Unknown template name: config error, like other bad arguments.
+        $this->assertSame(
+            get_string('error:unknowndetailtemplate', 'local_wb_dashboard', 'nosuchtemplate'),
+            shortcodes::toplist('toplist', $args + ['details' => 'nosuchtemplate'], null, $env, fn() => '')
+        );
+
+        // Without details: no buttons, no modal wiring.
+        $html = shortcodes::toplist('toplist', $args, null, $env, fn() => '');
+        $this->assertStringNotContainsString('wb-dashboard-detail', $html);
+        $this->assertStringNotContainsString('data-details', $html);
+    }
+
+    /**
+     * bars=0 renders the rows without the progress bar element; the default
+     * keeps it.
+     */
+    public function test_shortcode_bars_argument(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $args = [
+            'source' => 'reportbuilder',
+            'report' => '1',
+            'categoryfield' => 'coursename',
+            'valuefield' => 'completions',
+            'top' => '2',
+        ];
+
+        $env = (object)['context' => null];
+        $html = shortcodes::toplist('toplist', $args, null, $env, fn() => '');
+        $this->assertSame(2, substr_count($html, 'data-region="toplist-bar"'));
+
+        $html = shortcodes::toplist('toplist', $args + ['bars' => '0'], null, $env, fn() => '');
+        $this->assertStringNotContainsString('data-region="toplist-bar"', $html);
+        // Rank, label and value slots still render.
+        $this->assertSame(2, substr_count($html, 'data-region="toplist-row"'));
+        $this->assertSame(2, substr_count($html, 'data-region="toplist-value"'));
+
+        // The definition itself: default on, bars=0 off, not a source param.
+        $definition = toplist_definition::create_definition_from_shortcode_args($args);
+        $this->assertTrue($definition->displayopts['bars']);
+        $definition = toplist_definition::create_definition_from_shortcode_args($args + ['bars' => '0']);
+        $this->assertFalse($definition->displayopts['bars']);
+        $this->assertArrayNotHasKey('bars', $definition->sourceparams);
     }
 }

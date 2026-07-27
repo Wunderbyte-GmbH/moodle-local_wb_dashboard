@@ -352,6 +352,17 @@ class shortcodes {
             return get_string('error:unknownsource', 'local_wb_dashboard', s($definition->source));
         }
 
+        // Optional per-row drill-down: "details" names an admin-configured
+        // detail template rendered into a modal (see detail_templates). A
+        // misconfigured name surfaces as an error string, like other args.
+        $detailsname = $definition->displayopts['details'] ?? '';
+        if ($detailsname !== '' && \local_wb_dashboard\local\detail\detail_templates::get($detailsname) === null) {
+            return get_string('error:unknowndetailtemplate', 'local_wb_dashboard', s($detailsname));
+        }
+        // Same context fallback as chart(): a shortcode rendered outside a
+        // context-bound page falls back to the system context.
+        $envcontext = $env->context ?? \context_system::instance();
+
         $domid = $definition->to_domid();
         $rows = [];
         for ($rank = 1; $rank <= $definition->displayopts['top']; $rank++) {
@@ -366,6 +377,10 @@ class shortcodes {
             'consumes' => json_encode($definition->consumesfilters),
             'wsargs' => json_encode($definition->to_wsargs()),
             'palettename' => palette_manager::name(),
+            'hasdetails' => $detailsname !== '',
+            'detailsname' => $detailsname,
+            'contextid' => (int)$envcontext->id,
+            'hasbars' => !empty($definition->displayopts['bars']),
         ];
 
         return $OUTPUT->render_from_template('local_wb_dashboard/toplist', $context);

@@ -135,3 +135,55 @@ flowchart TD
 |----------------|----------------------|
 | `number` / `count` | Sum of the first series' data points (parts of one whole). |
 | `percent` | `base ÷ total × 100`. base = first data point; total = `axismax` meta (delta), else the second data point (two-report part/whole ratio), else base. Divide-by-zero &rarr; 0. |
+
+## Fixed filters
+
+`fixedfilters="key:value;key2:value2"` (all display shortcodes) pins literal
+filter values on one instance. The definition parses the pairs
+(`definition\fixed_filters::parse()`) into ordinary `{key, type, value}`
+filtervalues triples shipped in the instance's `wsargs`; the AMD runtime
+prepends them to the page filterbus values on every web-service call (dropping
+a page value for the same key). Server-side nothing is new: the pipeline
+treats them like any client filter value, and **locked filters still win**
+(`pipeline::build_constraints()` inserts locked constraints first and skips
+client values for locked keys). Like all wsargs, fixed filters are
+client-tamperable — parity with the existing trust model, where every request
+re-runs `require_access()` against the report itself.
+
+`consumes=none` maps to the sentinel key `__none__`, which never matches a
+real filter key: the instance neither reacts to nor sends any page filter
+value. (An *empty* `consumes` means the opposite: react to everything.)
+
+## Detail modals (per-row drill-down)
+
+The `[toplist]` shortcode's `details=<name>` argument adds a per-row
+"See details" button opening a modal whose body is an **admin-authored named
+template** (setting `detailtemplates`, parsed by `detail\detail_templates`) —
+arbitrary HTML containing further display shortcodes.
+
+Flow:
+
+```mermaid
+flowchart TD
+  TL["[toplist ... idfield=courseid details=coursedetail]"] --> WS2["get_toplist_data WS<br/>rows now carry rowid (idfield &rarr; rows_shaping meta.rowids &rarr; toplist_reducer)"]
+  WS2 --> JS["toplist.js stamps data-rowid/data-rowlabel per row"]
+  JS --> CLICK["detail_modal.js: click &rarr; core/modal +<br/>Fragment.loadFragment('local_wb_dashboard','detail', contextid, {name, value, label})"]
+  CLICK --> FRAG["lib.php local_wb_dashboard_output_fragment_detail()<br/>(core WS did require_login + validate_context)"]
+  FRAG --> SUB["detail_templates::get(name) + substitute({{id}}/{{label}}, sanitized)"]
+  SUB --> FMT2["format_text(FORMAT_HTML, noclean) &rarr; shortcodes filter expands inner [chart]/[digits]/[toplist]"]
+  FMT2 --> BOOT["fragment returns html+js; modules boot in the modal,<br/>their fixedfilters pin the clicked id on every data load"]
+```
+
+Trust model:
+
+- The **template body** is site-admin-authored (an admin setting, same trust
+  level as `lockedfilters`) — hence `noclean` rendering.
+- The **substituted values** (`{{id}}`, `{{label}}`) come from report rows;
+  `detail_templates::substitute()` strips `"`, `[`, `]`, `;` and control
+  characters so they can never alter the surrounding shortcode syntax.
+- The **row id exposure** is not new data: the id is a column of a report the
+  viewer already passed `require_can_view_report()` for.
+- Every shortcode inside the modal still runs the full pipeline
+  (`require_access()` per request) when loading its data.
+- Inner shortcodes should use `consumes=none` + `fixedfilters="…:{{id}}"`;
+  `[chartfilter]` is unsupported inside modals (page-singleton filterbus).

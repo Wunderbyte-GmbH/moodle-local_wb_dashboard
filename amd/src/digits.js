@@ -39,6 +39,10 @@ const createController = (root) => {
     const skeleton = root.querySelector('.local-dashboard-digits-skeleton');
     const wsargs = JSON.parse(root.dataset.wsargs || '{}');
     const consumes = JSON.parse(root.dataset.consumes || '[]');
+    // Fixed filter values pinned on this instance; they always win over the
+    // page filter of the same key (locked filters still win server-side).
+    const fixedFilters = wsargs.fixedfilters || [];
+    const fixedKeys = fixedFilters.map((f) => f.key);
     let requestToken = 0;
 
     const setBusy = (busy) => {
@@ -69,7 +73,8 @@ const createController = (root) => {
             label: wsargs.label || '',
             decimals: wsargs.decimals || 0,
             unit: wsargs.unit || '',
-            filtervalues: Filterbus.valuesFor(consumes)
+            filtervalues: fixedFilters.concat(
+                Filterbus.valuesFor(consumes).filter((fv) => fixedKeys.indexOf(fv.key) === -1))
         };
         Ajax.call([{methodname: 'local_wb_dashboard_get_digits_data', args: args}])[0]
             .then((result) => {

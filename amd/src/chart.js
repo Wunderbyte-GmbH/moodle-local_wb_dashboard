@@ -110,6 +110,10 @@ const createController = (canvas) => {
     const skeleton = canvas.previousElementSibling;
     const wsargs = JSON.parse(canvas.dataset.wsargs || '{}');
     const consumes = JSON.parse(canvas.dataset.consumes || '[]');
+    // Fixed filter values pinned on this instance; they always win over the
+    // page filter of the same key (locked filters still win server-side).
+    const fixedFilters = wsargs.fixedfilters || [];
+    const fixedKeys = fixedFilters.map((f) => f.key);
     let requestToken = 0;
 
     const setBusy = (busy) => {
@@ -156,7 +160,8 @@ const createController = (canvas) => {
             title: wsargs.title || '',
             centertext: wsargs.centertext !== false,
             target: wsargs.target || 0,
-            filtervalues: Filterbus.valuesFor(consumes)
+            filtervalues: fixedFilters.concat(
+                Filterbus.valuesFor(consumes).filter((fv) => fixedKeys.indexOf(fv.key) === -1))
         };
         Ajax.call([{methodname: 'local_wb_dashboard_get_chart_data', args: args}])[0]
             .then((result) => {

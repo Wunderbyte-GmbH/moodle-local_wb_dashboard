@@ -67,6 +67,7 @@ $string['error:missingsource'] = 'The chart shortcode requires a "source" argume
 $string['error:noreportdata'] = 'The selected report returned no data.';
 $string['error:unknownbarmode'] = 'Unknown top-list bar mode "{$a}".';
 $string['error:unknowncharttype'] = 'Unknown chart type "{$a}".';
+$string['error:unknowndetailtemplate'] = 'No detail template named "{$a}" is configured (see the "Detail templates" admin setting).';
 $string['error:unknowndisplaymode'] = 'Unknown digits display mode "{$a}".';
 $string['error:unknowndownloadformat'] = 'Unknown or disabled download format "{$a}".';
 $string['error:unknownfiltertype'] = 'Unknown filter type "{$a}".';
@@ -80,6 +81,11 @@ $string['pluginname'] = 'Wunderbyte Dashboard Charts';
 $string['privacy:metadata'] = 'The dashboard charts plugin does not store any personal data in the database. Page filter selections are cached transiently only.';
 $string['settings:activepalette'] = 'Active palette';
 $string['settings:activepalette_desc'] = 'The palette subplugin used site-wide. It supplies the chart colour scheme and (optionally) its own CSS. Install a palette to add a client\'s branding.';
+$string['settings:detailtemplates'] = 'Detail templates';
+$string['settings:detailtemplates_desc'] = 'Named templates for the per-row "See details" modal of the [toplist] shortcode. Each template starts with a marker line "=== name ===" followed by its body; define as many templates as you need in this one field. A toplist opts in with details=name and idfield=column (the report column holding the row\'s raw id). The body is arbitrary HTML (divs, Bootstrap classes, inline styles) containing dashboard shortcodes; the placeholders {{id}} and {{label}} are replaced with the clicked row\'s raw id and label. Pin the clicked entity onto every inner shortcode with fixedfilters="filterkey:{{id}}" and isolate it from the page filters with consumes=none. Example:<br><pre>=== coursedetail ===
+&lt;h3&gt;{{label}}&lt;/h3&gt;
+[digits source=reportbuilder report=12 valuefield=views consumes=none fixedfilters="courseid:{{id}}"]
+[toplist source=reportbuilder report=14 categoryfield=username valuefield=score top=3 consumes=none fixedfilters="courseid:{{id}}"]</pre>The Shortcodes text filter must be enabled for the content to render. Template bodies are rendered without cleaning (site-admin trust, like the locked filters setting). Chartfilter controls are not supported inside detail templates.';
 $string['settings:lockedfilters'] = 'Locked filters';
 $string['settings:lockedfilters_desc'] = 'Lock filter keys to user profile fields, one mapping per line as "filterkey=profilefieldshortname" (e.g. "region=region"). A mapping may be limited to one or more roles by appending "|role1,role2" (e.g. "region=region|regionalmanager"): only users assigned one of those roles in the system context get that key locked, so different roles can have different filters frozen on the same page. Without a role suffix, the mapping applies to every user. For an affected user, a mapped filter key is forced server-side to that user\'s own profile field value on all charts and digits; the [chartfilter] control for the key is replaced by a static value. The "local/wb_dashboard:ignorelockedfilters" capability exempts a user from all locks. The profile field value must exactly match the report filter\'s option values (case and spelling). A locked user with an empty profile field sees no data. Role names must match existing role shortnames; an unmatched role name means the lock applies to nobody.';
 $string['shortcode:chart'] = 'Render a chart from a data source (type, source and filters configurable).';
@@ -90,5 +96,6 @@ $string['shortcode:toplist'] = 'Render a ranked top-N list with a progress bar p
 $string['subplugintype_wbdashboardpalette'] = 'Dashboard palette';
 $string['subplugintype_wbdashboardpalette_plural'] = 'Dashboard palettes';
 $string['toplist:nodata'] = 'No data for the current filters.';
+$string['toplist:seedetails'] = 'See details';
 $string['wb_dashboard:configurecharts'] = 'Configure per-chart colours';
 $string['wb_dashboard:ignorelockedfilters'] = 'Ignore locked page filters';

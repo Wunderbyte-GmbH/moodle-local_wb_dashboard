@@ -101,6 +101,10 @@ class rows_shaping implements shaping_strategy {
         $valkey = (!$iscount && $valuefield !== '')
             ? $source->resolve_field($datasetid, $valuefield, $rows[0]) : '';
         $stackkey = $stackfield !== '' ? $source->resolve_field($datasetid, $stackfield, $rows[0]) : '';
+        // Optional raw identifier per category (e.g. courseid), carried
+        // alongside the formatted labels for drill-down consumers.
+        $idfield = trim((string)($params['idfield'] ?? ''));
+        $idkey = $idfield !== '' ? $source->resolve_field($datasetid, $idfield, $rows[0]) : '';
 
         // Each row contributes 1 (count) or its numeric value field (sum).
         $contribution = function (array $row) use ($iscount, $valkey): float {
@@ -110,17 +114,28 @@ class rows_shaping implements shaping_strategy {
             ? get_string('label:count', 'local_wb_dashboard')
             : format_string($valuefield);
 
-        // Preserve first-seen category order.
+        // Preserve first-seen category order; the id of a category is the
+        // first-seen row's id (formatted cells may carry markup — strip it).
         $categories = [];
+        $rowids = [];
         foreach ($rows as $row) {
             $cat = (string)($row[$catkey] ?? '');
+            if (isset($categories[$cat])) {
+                continue;
+            }
             $categories[$cat] = true;
+            if ($idkey !== '') {
+                $rowids[] = trim(strip_tags((string)($row[$idkey] ?? '')));
+            }
         }
         $categories = array_keys($categories);
         $catindex = array_flip($categories);
 
         $data = new chart_data();
         $data->set_labels(array_map('format_string', $categories));
+        if ($idkey !== '') {
+            $data->set_meta('rowids', $rowids);
+        }
 
         if ($multifield) {
             $this->add_field_series(
@@ -311,6 +326,12 @@ class rows_shaping implements shaping_strategy {
         $data->labels = array_values(array_map(fn(int $i): string => $data->labels[$i], $keep));
         foreach ($data->series as $series) {
             $series->data = array_values(array_map(fn(int $i): float => $series->data[$i] ?? 0.0, $keep));
+        }
+        if (!empty($data->meta['rowids'])) {
+            $data->set_meta('rowids', array_values(array_map(
+                fn(int $i): string => (string)($data->meta['rowids'][$i] ?? ''),
+                $keep
+            )));
         }
         return $data;
     }

@@ -31,7 +31,7 @@ use local_wb_dashboard\local\digits\digits_reducer;
  */
 class digits_definition {
     /** Reserved shortcode keys handled by the plugin (everything else = source param). */
-    private const RESERVED = ['source', 'display', 'label', 'decimals', 'unit', 'consumes', 'pageid'];
+    private const RESERVED = ['source', 'display', 'label', 'decimals', 'unit', 'consumes', 'pageid', 'fixedfilters'];
 
     /** @var string Source name (e.g. "reportbuilder"). */
     public string $source;
@@ -50,6 +50,9 @@ class digits_definition {
 
     /** @var string Page identifier the field's filter state belongs to. */
     public string $pageid;
+
+    /** @var array Fixed filter values pinned on this instance (filtervalues triples). */
+    public array $fixedfilters = [];
 
     /**
      * Constructor.
@@ -92,10 +95,16 @@ class digits_definition {
 
         $consumes = [];
         if (!empty($args['consumes'])) {
-            foreach (explode(',', $args['consumes']) as $key) {
-                $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
-                if ($key !== '') {
-                    $consumes[] = $key;
+            // A value of "none" isolates the instance from every page filter
+            // (empty consumes means "react to all keys" — the opposite).
+            if (strtolower(trim((string)$args['consumes'])) === 'none') {
+                $consumes = ['__none__'];
+            } else {
+                foreach (explode(',', $args['consumes']) as $key) {
+                    $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
+                    if ($key !== '') {
+                        $consumes[] = $key;
+                    }
                 }
             }
         }
@@ -115,7 +124,9 @@ class digits_definition {
             $sourceparams[(string)$k] = (string)$v;
         }
 
-        return new self($source, $display, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition = new self($source, $display, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition->fixedfilters = fixed_filters::parse((string)($args['fixedfilters'] ?? ''));
+        return $definition;
     }
 
     /**
@@ -136,6 +147,7 @@ class digits_definition {
             'label'        => $this->displayopts['label'] ?? '',
             'decimals'     => $this->displayopts['decimals'] ?? 0,
             'unit'         => $this->displayopts['unit'] ?? '',
+            'fixedfilters' => $this->fixedfilters,
         ];
     }
 
@@ -151,11 +163,16 @@ class digits_definition {
     public function to_domid(): string {
         $params = $this->sourceparams;
         ksort($params);
-        $canonical = json_encode([
+        $identity = [
             'source'       => $this->source,
             'display'      => $this->display,
             'sourceparams' => $params,
-        ]);
+        ];
+        // Only fold fixed filters in when set, so pre-existing ids stay stable.
+        if (!empty($this->fixedfilters)) {
+            $identity['fixedfilters'] = $this->fixedfilters;
+        }
+        $canonical = json_encode($identity);
         return 'local-dashboard-digits-' . substr(sha1((string)$canonical), 0, 12);
     }
 }

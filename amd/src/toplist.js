@@ -40,6 +40,10 @@ const createController = (root) => {
     const skeleton = root.querySelector('.local-dashboard-toplist-skeleton');
     const wsargs = JSON.parse(root.dataset.wsargs || '{}');
     const consumes = JSON.parse(root.dataset.consumes || '[]');
+    // Fixed filter values pinned on this instance; they always win over the
+    // page filter of the same key (locked filters still win server-side).
+    const fixedFilters = wsargs.fixedfilters || [];
+    const fixedKeys = fixedFilters.map((f) => f.key);
     let requestToken = 0;
 
     const setBusy = (busy) => {
@@ -59,9 +63,20 @@ const createController = (root) => {
             rowEl.style.display = '';
             rowEl.querySelector('[data-region="toplist-label"]').textContent = row.label;
             rowEl.querySelector('[data-region="toplist-value"]').textContent = row.formatted;
+            // The bar element is absent with bars=0.
             const bar = rowEl.querySelector('[data-region="toplist-bar"]');
-            bar.style.width = row.percent + '%';
-            bar.setAttribute('title', row.percent + '%');
+            if (bar) {
+                bar.style.width = row.percent + '%';
+                bar.setAttribute('title', row.percent + '%');
+            }
+            // Stamp the row identity for the detail modal and show its button
+            // only when the row actually carries an id (idfield configured).
+            rowEl.dataset.rowid = row.rowid || '';
+            rowEl.dataset.rowlabel = row.label;
+            const detailBtn = rowEl.querySelector('[data-action="wb-dashboard-detail"]');
+            if (detailBtn) {
+                detailBtn.style.display = rowEl.dataset.rowid === '' ? 'none' : '';
+            }
         });
         if (emptyEl) {
             emptyEl.style.display = data.rows.length ? 'none' : '';
@@ -81,7 +96,8 @@ const createController = (root) => {
             max: wsargs.max || 0,
             decimals: wsargs.decimals || 0,
             suffix: wsargs.suffix || '',
-            filtervalues: Filterbus.valuesFor(consumes)
+            filtervalues: fixedFilters.concat(
+                Filterbus.valuesFor(consumes).filter((fv) => fixedKeys.indexOf(fv.key) === -1))
         };
         Ajax.call([{methodname: 'local_wb_dashboard_get_toplist_data', args: args}])[0]
             .then((result) => {

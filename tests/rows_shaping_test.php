@@ -333,6 +333,56 @@ final class rows_shaping_test extends \advanced_testcase {
     }
 
     /**
+     * idfield carries one raw id per category, aligned with the labels: the
+     * first-seen row supplies the id, markup in the cell is stripped.
+     */
+    public function test_idfield_carries_rowids_aligned_with_labels(): void {
+        $rows = [
+            ['coursename' => 'A', 'courseid' => '<a href="#">11</a>', 'completions' => 10],
+            ['coursename' => 'B', 'courseid' => '22', 'completions' => 50],
+            // Duplicate category: the first-seen id must win.
+            ['coursename' => 'A', 'courseid' => '99', 'completions' => 5],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'coursename', 'valuefield' => 'completions',
+            'idfield' => 'courseid',
+        ], []);
+
+        $this->assertSame(['A', 'B'], $data->labels);
+        $this->assertSame(['11', '22'], $data->meta['rowids']);
+    }
+
+    /**
+     * A top-N remaps the rowids with the same slice as labels and series.
+     */
+    public function test_idfield_topn_remaps_rowids_with_labels(): void {
+        $rows = [
+            ['coursename' => 'A', 'courseid' => '1', 'completions' => 10],
+            ['coursename' => 'B', 'courseid' => '2', 'completions' => 50],
+            ['coursename' => 'C', 'courseid' => '3', 'completions' => 30],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'coursename', 'valuefield' => 'completions',
+            'idfield' => 'courseid', 'top' => 2, 'order' => 'desc',
+        ], []);
+
+        $this->assertSame(['B', 'C'], $data->labels);
+        $this->assertSame(['2', '3'], $data->meta['rowids']);
+    }
+
+    /**
+     * Without idfield no rowids meta is set (regression).
+     */
+    public function test_without_idfield_no_rowids_meta(): void {
+        $source = $this->source_returning($this->rows_from(['A' => 10, 'B' => 50]));
+        $data = (new rows_shaping())->shape($source, [
+            'report' => 1, 'categoryfield' => 'coursename', 'valuefield' => 'completions',
+        ], []);
+
+        $this->assertArrayNotHasKey('rowids', $data->meta);
+    }
+
+    /**
      * Invalid combinations (stackfield, count, or no value field) throw.
      */
     public function test_invalid_multifield_combinations_throw(): void {

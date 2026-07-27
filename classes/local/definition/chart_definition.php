@@ -30,7 +30,7 @@ namespace local_wb_dashboard\local\definition;
  */
 class chart_definition {
     /** Reserved shortcode keys handled by the plugin (everything else = source param). */
-    private const RESERVED = ['type', 'source', 'width', 'height', 'title', 'consumes', 'pageid', 'target'];
+    private const RESERVED = ['type', 'source', 'width', 'height', 'title', 'consumes', 'pageid', 'target', 'fixedfilters'];
 
     /** @var string Source name (e.g. "reportbuilder"). */
     public string $source;
@@ -49,6 +49,9 @@ class chart_definition {
 
     /** @var string Page identifier the chart's filter state belongs to. */
     public string $pageid;
+
+    /** @var array Fixed filter values pinned on this instance (filtervalues triples). */
+    public array $fixedfilters = [];
 
     /**
      * Constructor.
@@ -93,10 +96,16 @@ class chart_definition {
 
         $consumes = [];
         if (!empty($args['consumes'])) {
-            foreach (explode(',', $args['consumes']) as $key) {
-                $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
-                if ($key !== '') {
-                    $consumes[] = $key;
+            // A value of "none" isolates the instance from every page filter
+            // (empty consumes means "react to all keys" — the opposite).
+            if (strtolower(trim((string)$args['consumes'])) === 'none') {
+                $consumes = ['__none__'];
+            } else {
+                foreach (explode(',', $args['consumes']) as $key) {
+                    $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
+                    if ($key !== '') {
+                        $consumes[] = $key;
+                    }
                 }
             }
         }
@@ -124,7 +133,9 @@ class chart_definition {
             $sourceparams[(string)$k] = (string)$v;
         }
 
-        return new self($source, $type, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition = new self($source, $type, $sourceparams, $displayopts, $consumes, $pageid);
+        $definition->fixedfilters = fixed_filters::parse((string)($args['fixedfilters'] ?? ''));
+        return $definition;
     }
 
     /**
@@ -144,12 +155,18 @@ class chart_definition {
     public function chartid_base(int $contextid): string {
         $params = $this->sourceparams;
         ksort($params);
-        $canonical = json_encode([
+        $identity = [
             'context'      => $contextid,
             'source'       => $this->source,
             'type'         => $this->type,
             'sourceparams' => $params,
-        ]);
+        ];
+        // Only fold fixed filters in when set, so pre-existing chart ids (and
+        // the per-chart settings stored under them) stay stable.
+        if (!empty($this->fixedfilters)) {
+            $identity['fixedfilters'] = $this->fixedfilters;
+        }
+        $canonical = json_encode($identity);
         return 'c' . substr(sha1((string)$canonical), 0, 12);
     }
 
@@ -194,6 +211,7 @@ class chart_definition {
             'title'        => $this->displayopts['title'] ?? get_string('chart', 'local_wb_dashboard'),
             'centertext'   => $this->displayopts['centertext'] ?? true,
             'target'       => (float)($this->displayopts['target'] ?? 0),
+            'fixedfilters' => $this->fixedfilters,
         ];
     }
 }

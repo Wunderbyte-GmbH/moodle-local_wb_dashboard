@@ -29,7 +29,7 @@ namespace local_wb_dashboard\local\dto;
  */
 class chart_data implements \JsonSerializable {
     /** Allowed keys in $meta. Anything else is dropped by set_meta(). */
-    private const ALLOWED_META = ['title', 'centertext', 'unit', 'axistitles', 'stacked', 'indexaxis', 'axismax'];
+    private const ALLOWED_META = ['title', 'centertext', 'unit', 'axistitles', 'stacked', 'indexaxis', 'axismax', 'rowids'];
 
     /** @var string[] Category / axis labels. */
     public array $labels = [];

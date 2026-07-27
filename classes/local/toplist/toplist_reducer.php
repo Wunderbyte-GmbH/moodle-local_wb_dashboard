@@ -64,7 +64,7 @@ class toplist_reducer {
      * @param string $order "desc" keeps the highest values, "asc" the lowest.
      * @param string $barmode One of the BAR_* constants.
      * @param float $max Fixed maximum for BAR_MAX.
-     * @return array<int, array{label: string, value: float, percent: float}>
+     * @return array<int, array{label: string, value: float, percent: float, id: string}>
      */
     public static function reduce(chart_data $dto, int $top, string $order, string $barmode, float $max = 0.0): array {
         $values = $dto->series[0]->data ?? [];
@@ -108,6 +108,8 @@ class toplist_reducer {
                 'label' => (string)($dto->labels[$i] ?? ''),
                 'value' => $value,
                 'percent' => round(min(100.0, max(0.0, $percent)), 1),
+                // Raw category id when the shaping carried one (idfield).
+                'id' => (string)($dto->meta['rowids'][$i] ?? ''),
             ];
         }
         return $rows;
