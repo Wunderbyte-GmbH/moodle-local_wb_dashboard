@@ -174,8 +174,6 @@ goal-progress bar — the row count fills the bar towards the configured goal:
 | `stackedbar` | categories × multiple series (use `stackfield`) | Grouped **stacked** bars. |
 | `progress` | one series of N segments + a total | Single horizontal stacked bar with a fixed maximum — a progress/percentage bar. The maximum is, in order: an explicit `target` flag, an axis maximum provided by the shaping (two-report delta), else the series total. |
 
-`line` and `pie` are intentionally out of the v1 set (easy to add later).
-
 ---
 
 ## 4. `[digits]`
