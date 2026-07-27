@@ -1,0 +1,80 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template local_wb_dashboard/toplist
+
+    Renders a ranked top-N list (rank, label, progress bar, value) and loads
+    its rows via the web service. All row slots are rendered server-side with
+    their rank numbers prefilled and stay hidden until the JS fills them —
+    the JS never builds markup, it only sets text, widths and visibility.
+
+    The wrapper id is deterministic and constant so it can be targeted in CSS.
+
+    Context variables required for this template:
+    * domid - Deterministic, constant DOM id for the list wrapper.
+    * title - Optional heading ('' = hidden).
+    * rows - One {rank} entry per row slot (top N).
+    * pageid - Page identifier for shared filter state.
+    * consumes - JSON array of filter keys this list reacts to.
+    * wsargs - JSON object of web-service arguments (source, params, ...).
+    * palettename - Active palette name; added as a wb-palette-NAME scope class.
+
+    Example context (json):
+    {
+        "domid": "local-dashboard-toplist-ab12cd34ef56",
+        "title": "Top courses",
+        "rows": [{"rank": 1}, {"rank": 2}, {"rank": 3}],
+        "pageid": "default",
+        "consumes": "[]",
+        "wsargs": "{}",
+        "palettename": "standard"
+    }
+}}
+<div class="local-dashboard-toplist wb-palette-{{palettename}}" id="{{domid}}"
+     data-region="toplist-wrapper"
+     data-pageid="{{pageid}}"
+     data-consumes="{{consumes}}"
+     data-wsargs="{{wsargs}}"
+     aria-busy="true">
+    {{#title}}
+    <div class="local-dashboard-toplist-title" id="{{domid}}-title">{{title}}</div>
+    {{/title}}
+    <div class="local-dashboard-toplist-skeleton" aria-hidden="true"></div>
+    <ol class="local-dashboard-toplist-rows">
+        {{#rows}}
+        <li class="local-dashboard-toplist-row" data-region="toplist-row" style="display: none;">
+            <span class="local-dashboard-toplist-rank" aria-hidden="true">{{rank}}</span>
+            <span class="local-dashboard-toplist-body">
+                <span class="local-dashboard-toplist-label" data-region="toplist-label"></span>
+                <span class="local-dashboard-toplist-bar">
+                    <span class="local-dashboard-toplist-bar-fill" data-region="toplist-bar" style="width: 0%;"></span>
+                </span>
+            </span>
+            <span class="local-dashboard-toplist-value" data-region="toplist-value"></span>
+        </li>
+        {{/rows}}
+    </ol>
+    <div class="local-dashboard-toplist-empty" data-region="toplist-empty" style="display: none;">
+        {{#str}}toplist:nodata, local_wb_dashboard{{/str}}
+    </div>
+</div>
+
+{{#js}}
+require(['local_wb_dashboard/toplist'], function(toplist) {
+    toplist.init({{#quote}}{{domid}}{{/quote}});
+});
+{{/js}}

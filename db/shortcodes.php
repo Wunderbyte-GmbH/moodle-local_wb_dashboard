@@ -45,4 +45,9 @@ $shortcodes = [
         'wraps'       => false,
         'description' => 'shortcode:downloadreport',
     ],
+    'toplist' => [
+        'callback'    => 'local_wb_dashboard\shortcodes::toplist',
+        'wraps'       => false,
+        'description' => 'shortcode:toplist',
+    ],
 ];

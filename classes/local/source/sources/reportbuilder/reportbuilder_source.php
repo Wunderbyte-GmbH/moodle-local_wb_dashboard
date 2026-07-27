@@ -253,8 +253,18 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
     #[\Override]
     public function require_access(array $sourceparams): void {
         foreach ($this->report_ids($sourceparams) as $reportid) {
-            $report = manager::get_report_from_id($reportid);
-            permission::require_can_view_report($report->get_report_persistent());
+            // Check the persistent before instantiating the report: a wrong id
+            // (nonexistent, or a system-report row from reportbuilder_report)
+            // must surface as a clear config error, not a deep core exception.
+            try {
+                $persistent = new \core_reportbuilder\local\models\report($reportid);
+            } catch (\dml_missing_record_exception $e) {
+                throw new \moodle_exception('error:invalidreportid', 'local_wb_dashboard');
+            }
+            if ($persistent->get('type') !== \core_reportbuilder\local\report\base::TYPE_CUSTOM_REPORT) {
+                throw new \moodle_exception('error:invalidreportid', 'local_wb_dashboard');
+            }
+            permission::require_can_view_report($persistent);
         }
     }
 

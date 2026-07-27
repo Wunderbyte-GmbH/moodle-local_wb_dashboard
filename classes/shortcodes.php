@@ -24,6 +24,7 @@ use local_wb_dashboard\local\chart\chart_type;
 use local_wb_dashboard\local\definition\chart_definition;
 use local_wb_dashboard\local\definition\digits_definition;
 use local_wb_dashboard\local\definition\filter_definition;
+use local_wb_dashboard\local\definition\toplist_definition;
 use local_wb_dashboard\local\digits\digits_reducer;
 use local_wb_dashboard\local\filter\daterange_filter;
 use local_wb_dashboard\local\filter\filter_factory;
@@ -318,5 +319,51 @@ class shortcodes {
             'consumes' => json_encode($consumes),
         ];
         return $OUTPUT->render_from_template('local_wb_dashboard/downloadreport', $context);
+    }
+
+    /**
+     * [toplist ...] — render a ranked top-N list (rank, label, progress bar,
+     * value). Data is loaded client-side via the web service.
+     *
+     * The row slots are rendered server-side (rank numbers prefilled, hidden);
+     * the JS only fills text and bar widths, never builds markup.
+     *
+     * @param string $shortcode
+     * @param array $args
+     * @param string|null $content
+     * @param object $env
+     * @param \Closure $next
+     * @return string
+     */
+    public static function toplist($shortcode, $args, $content, $env, $next): string {
+        global $OUTPUT;
+
+        $args = (array)$args;
+        $definition = toplist_definition::create_definition_from_shortcode_args($args);
+
+        if ($definition->source === '') {
+            return get_string('error:missingsource', 'local_wb_dashboard');
+        }
+        if (!source_registry::exists($definition->source)) {
+            return get_string('error:unknownsource', 'local_wb_dashboard', s($definition->source));
+        }
+
+        $domid = $definition->to_domid();
+        $rows = [];
+        for ($rank = 1; $rank <= $definition->displayopts['top']; $rank++) {
+            $rows[] = ['rank' => $rank];
+        }
+
+        $context = [
+            'domid' => $domid,
+            'title' => $definition->displayopts['title'],
+            'rows' => $rows,
+            'pageid' => $definition->pageid,
+            'consumes' => json_encode($definition->consumesfilters),
+            'wsargs' => json_encode($definition->to_wsargs()),
+            'palettename' => palette_manager::name(),
+        ];
+
+        return $OUTPUT->render_from_template('local_wb_dashboard/toplist', $context);
     }
 }

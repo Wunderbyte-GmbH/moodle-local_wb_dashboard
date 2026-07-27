@@ -430,7 +430,52 @@ for that key.
 
 ---
 
-## 7. A full page example
+## 7. `[toplist]`
+
+Renders a **ranked top-N list** — rank number, label, progress bar and value per
+row — from a Report Builder report. Rows re-rank live when a consumed page
+filter changes. The ranking metric and the bar metric may differ (e.g. rank by
+completions, bar = completion percentage).
+
+```
+# Top 5 courses by completions; the bar shows the completion percentage.
+# (One "Course participants" report: course name, Completed with Sum
+#  aggregation = ranking value, Completed with Percent aggregation = bar.)
+[toplist source=reportbuilder report=12 categoryfield=coursefullname valuefield=completedsum barfield=completedpercent top=5 consumes=region,period pageid=ops title="Top courses"]
+
+# Top 5 newsletters by delivered; bar = delivered / sent.
+[toplist source=reportbuilder report=13 categoryfield=communicationname valuefield=delivered bartotalfield=sent top=5 pageid=ops title="Top newsletters"]
+
+# Top 5 feedbacks by average score; bar = score / 5.
+[toplist source=reportbuilder report=15 categoryfield=course valuefield=score max=5 decimals=1 suffix="/5" top=5 pageid=ops title="Top feedback"]
+```
+
+| Flag | Values | Default | Meaning |
+|---|---|---|---|
+| `source` | source name | — (required) | Data source (`reportbuilder`). |
+| `report`, `categoryfield`, `valuefield`, `aggregation`, ... | | | Source params, exactly as for `[chart]` rows shaping: `categoryfield` is the row label, `valuefield` the ranking value (`aggregation=count` tallies rows instead). |
+| `top` | 1-20 | `5` | Number of rows. |
+| `order` | `desc` / `asc` | `desc` | `desc` ranks highest first (top N), `asc` lowest first (bottom N). Ties keep report order. |
+| `barfield` | field name | *(none)* | A field that already holds the bar percentage (0-100), e.g. a Percent-aggregated boolean column. |
+| `bartotalfield` | field name | *(none)* | A field to divide the value by: bar = value ÷ total. Use when the report cannot produce the percentage itself (Percent aggregation is boolean-only). |
+| `max` | number | *(none)* | Fixed bar maximum: bar = value ÷ max (e.g. `max=5` for scores). |
+| `decimals` | 0-6 | `0` | Decimal places of the displayed value. |
+| `suffix` | text | *(none)* | Appended to the value verbatim (e.g. `suffix="/5"` → "4.3/5"). |
+| `title` | text | *(none)* | Optional heading above the list. |
+| `consumes` | comma-separated filter keys | *(all)* | Which page filter keys the list reacts to. |
+| `pageid` | alphanumeric | `default` | Page identifier (same as the page's filters). |
+
+**Bar resolution order:** `barfield` → `bartotalfield` → `max` → *relative*
+(no flag: the highest-ranked value gets a full bar, the rest scale to it).
+A zero divisor gives an empty bar; fills are clamped to 0-100%.
+
+The row slots are server-rendered and constant; the JS only fills labels,
+values and bar widths. The wrapper id is deterministic
+(`local-dashboard-toplist-<hash>`) for CSS targeting, like digits.
+
+---
+
+## 8. A full page example
 
 ```
 [chartfilter key=period type=date label="From" pageid=team]
@@ -448,7 +493,7 @@ and chart above — each applying `period` through its own report's date filter.
 
 ---
 
-## 8. Per-chart colours (settings gear)
+## 9. Per-chart colours (settings gear)
 
 Charts follow the **active palette** by default. To recolour an individual chart,
 users with the `local/wb_dashboard:configurecharts` capability (managers by default)
