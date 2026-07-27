@@ -25,6 +25,14 @@ use moodle_exception;
 /**
  * Rows: one data point per category, optionally grouped into stacks.
  *
+ * Instead of a single "valuefield", a comma-separated "valuefields" list plots
+ * one series per field (grouped bars). An additional "remainderof" field turns
+ * that into a stacked part-of-whole bar: the listed fields are stacked and
+ * topped up with a computed remainder segment (remainderof minus the listed
+ * fields), so the total bar height equals the remainderof field — e.g.
+ * valuefields=delivered remainderof=sent renders delivered as a subset of all
+ * sent. Neither combines with "stackfield" or aggregation=count.
+ *
  * Suited to bar/stacked/horizontal charts.
  *
  * @package    local_wb_dashboard
@@ -43,7 +51,7 @@ class rows_shaping implements shaping_strategy {
         // The "count" aggregation needs only a category; "sum" also needs a value field.
         $iscount = strtolower((string)($params['aggregation'] ?? '')) === 'count';
         return !empty($params['report']) && !empty($params['categoryfield'])
-            && (!empty($params['valuefield']) || $iscount);
+            && (!empty($params['valuefield']) || !empty($params['valuefields']) || $iscount);
     }
 
     /**
@@ -65,6 +73,22 @@ class rows_shaping implements shaping_strategy {
         // Optional top-N: keep only the N highest (or lowest) categories.
         $top = (int)($params['top'] ?? 0);
         $order = (string)($params['order'] ?? 'desc');
+
+        // The "valuefields" list plots one series per field; "remainderof"
+        // additionally stacks them against a computed remainder of that field.
+        $valuefields = [];
+        if (!empty($params['valuefields'])) {
+            $valuefields = array_values(array_filter(array_map('trim', explode(',', (string)$params['valuefields']))));
+        } else if ($valuefield !== '') {
+            $valuefields = [$valuefield];
+        }
+        $remainderof = trim((string)($params['remainderof'] ?? ''));
+        $multifield = count($valuefields) > 1 || $remainderof !== '';
+        if ($multifield && ($iscount || $stackfield !== '' || empty($valuefields))) {
+            throw new moodle_exception('error:invalidfieldcombination', 'local_wb_dashboard');
+        }
+        // A one-entry "valuefields" without remainder is just a value field.
+        $valuefield = $valuefields[0] ?? $valuefield;
 
         $rows = $source->load_rows($datasetid, $constraints);
         if (empty($rows)) {
@@ -96,6 +120,12 @@ class rows_shaping implements shaping_strategy {
         $data = new chart_data();
         $data->set_labels(array_map('format_string', $categories));
 
+        if ($multifield) {
+            $this->add_field_series($data, $source, $datasetid, $rows, $catkey, $catindex, $valuefields, $remainderof,
+                isset($params['remainderlabel']) ? (string)$params['remainderlabel'] : '');
+            return $this->apply_topn($data, $top, $order);
+        }
+
         if ($stackkey === '') {
             // Single series.
             $values = array_fill(0, count($categories), 0.0);
@@ -122,6 +152,78 @@ class rows_shaping implements shaping_strategy {
         }
 
         return $this->apply_topn($data, $top, $order);
+    }
+
+    /**
+     * Add one series per value field, optionally stacked under a computed
+     * remainder segment of another field.
+     *
+     * With a remainder field, the listed series and the remainder are stacked,
+     * so each category's total bar height equals the remainder field's sum —
+     * the listed fields read as subsets of that whole. The remainder is
+     * clamped at zero where the listed fields exceed it.
+     *
+     * @param chart_data $data Chart data with the category labels already set.
+     * @param shapable_source $source Data access into the source.
+     * @param int $datasetid
+     * @param array $rows Loaded report rows.
+     * @param string $catkey Resolved category row key.
+     * @param array $catindex Category value => data index map.
+     * @param string[] $valuefields The fields to plot, one series each.
+     * @param string $remainderof Field supplying the stacked total ('' = none).
+     * @param string $remainderlabel Label for the remainder segment ('' = default).
+     */
+    private function add_field_series(
+        chart_data $data,
+        shapable_source $source,
+        int $datasetid,
+        array $rows,
+        string $catkey,
+        array $catindex,
+        array $valuefields,
+        string $remainderof,
+        string $remainderlabel
+    ): void {
+        $fieldkeys = [];
+        foreach ($valuefields as $field) {
+            $fieldkeys[$field] = $source->resolve_field($datasetid, $field, $rows[0]);
+        }
+        $remkey = $remainderof !== '' ? $source->resolve_field($datasetid, $remainderof, $rows[0]) : '';
+
+        $categorycount = count($catindex);
+        $totals = array_fill_keys($valuefields, array_fill(0, $categorycount, 0.0));
+        $remtotals = array_fill(0, $categorycount, 0.0);
+        foreach ($rows as $row) {
+            $i = $catindex[(string)($row[$catkey] ?? '')];
+            foreach ($fieldkeys as $field => $key) {
+                $totals[$field][$i] += shaper::to_float($row[$key] ?? 0);
+            }
+            if ($remkey !== '') {
+                $remtotals[$i] += shaper::to_float($row[$remkey] ?? 0);
+            }
+        }
+
+        $stack = $remainderof !== '' ? 'group' : null;
+        foreach ($totals as $field => $values) {
+            $data->add_series(new chart_series(format_string((string)$field), $values, [], null, $stack));
+        }
+        if ($remainderof === '') {
+            return;
+        }
+
+        $remainder = [];
+        foreach ($remtotals as $i => $total) {
+            $listed = 0.0;
+            foreach ($totals as $values) {
+                $listed += $values[$i];
+            }
+            $remainder[$i] = max(0.0, $total - $listed);
+        }
+        $label = trim($remainderlabel) !== ''
+            ? format_string(trim($remainderlabel))
+            : get_string('label:remaining', 'local_wb_dashboard');
+        $data->add_series(new chart_series($label, $remainder, [], null, 'group'));
+        $data->set_meta('stacked', true);
     }
 
     /**

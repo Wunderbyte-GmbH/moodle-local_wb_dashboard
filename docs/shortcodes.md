@@ -82,7 +82,10 @@ Reads every row of one report; each row becomes one data point. An optional
 |-------|-------------|
 | `report` | The report id. |
 | `categoryfield` | Field used as the category / x-axis label (one bar/point per distinct value). |
-| `valuefield` | Field used as the **numeric** value (bar height). Required unless `aggregation=count`. |
+| `valuefield` | Field used as the **numeric** value (bar height). Required unless `aggregation=count` or `valuefields` is used. |
+| `valuefields` | *(optional)* Comma-separated list of numeric fields — one series per field, rendered as grouped bars (e.g. `valuefields=sent,delivered,opened`). Not combinable with `stackfield` or `aggregation=count`. |
+| `remainderof` | *(optional)* Field supplying a **whole** that the `valuefields` are subsets of. The listed fields are stacked and topped up with a computed remainder (`remainderof` − listed fields, never below 0), so the total bar height equals this field — a part-of-whole bar per category. Same combination rules as `valuefields`. |
+| `remainderlabel` | *(optional)* Legend label for the computed remainder segment (default "Remaining"). |
 | `stackfield` | *(optional)* Field whose distinct values become separate stacked series. |
 | `aggregation` | *(optional)* `sum` (default) adds up `valuefield` per category; `count` tallies one per row (no `valuefield` needed). |
 | `top` | *(optional)* Keep only the N highest categories (a "top N"). Ranks by each category's total value (its stacked height when `stackfield` is used). Omit for all categories. |
@@ -103,6 +106,20 @@ inherently bounded already.
 ```
 [chart type=horizontalbar source=reportbuilder report=3 categoryfield=coursename valuefield=completions order=desc top=5 title="Top 5 courses"]
 [chart type=bar           source=reportbuilder report=3 categoryfield=country aggregation=count top=5 title="Top 5 countries by users"]
+```
+
+**Several fields per category** — grouped bars, one series per listed field:
+
+```
+[chart type=bar source=reportbuilder report=3 categoryfield=month valuefields=sent,delivered,opened width=40 height=24]
+```
+
+**Part of a whole** — `delivered` as a subset of all `sent`: delivered and the
+computed rest are stacked, so every bar's full height is the sent total. Works
+with `bar` and `horizontalbar` (stacking is applied automatically):
+
+```
+[chart type=bar source=reportbuilder report=3 categoryfield=month valuefields=delivered remainderof=sent remainderlabel="Not delivered"]
 ```
 
 **Counting rows** — for a report where each row is an entity (e.g. a user), count

@@ -182,4 +182,127 @@ final class rows_shaping_test extends \advanced_testcase {
         $this->assertSame('s2', $data->series[1]->label);
         $this->assertEquals([40.0, 5.0], $data->series[1]->data);
     }
+
+    /**
+     * Multiple value fields plot one (unstacked) series per field.
+     */
+    public function test_valuefields_plots_one_series_per_field(): void {
+        $rows = [
+            ['month' => 'Jan', 'sent' => 10, 'delivered' => 8],
+            ['month' => 'Jan', 'sent' => 5, 'delivered' => 5],
+            ['month' => 'Feb', 'sent' => 20, 'delivered' => 15],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'sent,delivered',
+        ], []);
+
+        $this->assertSame(['Jan', 'Feb'], $data->labels);
+        $this->assertCount(2, $data->series);
+        $this->assertSame('sent', $data->series[0]->label);
+        $this->assertEquals([15.0, 20.0], $data->series[0]->data);
+        $this->assertSame('delivered', $data->series[1]->label);
+        $this->assertEquals([13.0, 15.0], $data->series[1]->data);
+        // Grouped, not stacked.
+        $this->assertNull($data->series[0]->stack);
+        $this->assertArrayNotHasKey('stacked', $data->meta);
+    }
+
+    /**
+     * remainderof stacks the listed fields plus a computed remainder, so the
+     * bar total equals the remainder field.
+     */
+    public function test_remainderof_stacks_a_part_of_whole_bar(): void {
+        $rows = [
+            ['month' => 'Jan', 'sent' => 10, 'delivered' => 8],
+            ['month' => 'Jan', 'sent' => 5, 'delivered' => 5],
+            ['month' => 'Feb', 'sent' => 20, 'delivered' => 15],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'delivered', 'remainderof' => 'sent',
+        ], []);
+
+        $this->assertCount(2, $data->series);
+        $this->assertSame('delivered', $data->series[0]->label);
+        $this->assertEquals([13.0, 15.0], $data->series[0]->data);
+        // Remainder = sent - delivered per category.
+        $this->assertEquals([2.0, 5.0], $data->series[1]->data);
+        // Stacked so the total bar height equals "sent".
+        $this->assertSame('group', $data->series[0]->stack);
+        $this->assertSame('group', $data->series[1]->stack);
+        $this->assertTrue($data->meta['stacked']);
+    }
+
+    /**
+     * The remainder segment is clamped at zero and its label is overridable.
+     */
+    public function test_remainder_is_clamped_and_label_overridable(): void {
+        $rows = [
+            // Listed field exceeds the whole: remainder clamps to 0.
+            ['month' => 'Jan', 'sent' => 5, 'delivered' => 8],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'delivered', 'remainderof' => 'sent',
+            'remainderlabel' => 'Not delivered',
+        ], []);
+
+        $this->assertEquals([0.0], $data->series[1]->data);
+        $this->assertSame('Not delivered', $data->series[1]->label);
+    }
+
+    /**
+     * A remainderof top-N ranks by the whole (the remainder field's total).
+     */
+    public function test_remainderof_top_ranks_by_the_whole(): void {
+        $rows = [
+            ['month' => 'Jan', 'sent' => 10, 'delivered' => 9],
+            ['month' => 'Feb', 'sent' => 30, 'delivered' => 12],
+            ['month' => 'Mar', 'sent' => 20, 'delivered' => 19],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'delivered', 'remainderof' => 'sent',
+            'top' => 2, 'order' => 'desc',
+        ], []);
+
+        // Stacked heights are the sent totals: Feb=30, Mar=20, Jan=10.
+        $this->assertSame(['Feb', 'Mar'], $data->labels);
+        $this->assertEquals([12.0, 19.0], $data->series[0]->data);
+        $this->assertEquals([18.0, 1.0], $data->series[1]->data);
+    }
+
+    /**
+     * A one-entry valuefields without remainder behaves like valuefield.
+     */
+    public function test_single_valuefields_entry_equals_valuefield(): void {
+        $source = $this->source_returning($this->rows_from(['A' => 10, 'B' => 50]));
+        $data = (new rows_shaping())->shape($source, [
+            'report' => 1, 'categoryfield' => 'coursename', 'valuefields' => 'completions',
+        ], []);
+
+        $this->assertCount(1, $data->series);
+        $this->assertEquals([10.0, 50.0], $data->series[0]->data);
+        $this->assertNull($data->series[0]->stack);
+    }
+
+    /**
+     * Invalid combinations (stackfield, count, or no value field) throw.
+     */
+    public function test_invalid_multifield_combinations_throw(): void {
+        $rows = [['month' => 'Jan', 'sent' => 5, 'delivered' => 3, 'tag' => 't']];
+        $invalid = [
+            ['valuefields' => 'sent,delivered', 'stackfield' => 'tag'],
+            ['valuefields' => 'delivered', 'remainderof' => 'sent', 'stackfield' => 'tag'],
+            ['valuefields' => 'sent,delivered', 'aggregation' => 'count'],
+            ['remainderof' => 'sent', 'aggregation' => 'count'],
+            ['remainderof' => 'sent'],
+        ];
+        foreach ($invalid as $extra) {
+            try {
+                (new rows_shaping())->shape($this->source_returning($rows),
+                    $extra + ['report' => 1, 'categoryfield' => 'month'], []);
+                $this->fail('Expected moodle_exception for: ' . json_encode($extra));
+            } catch (\moodle_exception $e) {
+                $this->assertStringContainsString('invalidfieldcombination', $e->errorcode);
+            }
+        }
+    }
 }

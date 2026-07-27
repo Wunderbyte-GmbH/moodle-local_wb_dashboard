@@ -59,7 +59,8 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
     public function required_params(): array {
         return [
             'idbase', 'fieldbase', 'idtotal', 'fieldtotal',
-            'report', 'categoryfield', 'valuefield', 'stackfield', 'aggregation',
+            'report', 'categoryfield', 'valuefield', 'valuefields', 'remainderof', 'remainderlabel',
+            'stackfield', 'aggregation',
             'reports',
             'top', 'order',
         ];
