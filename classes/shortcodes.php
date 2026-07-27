@@ -17,6 +17,9 @@
 namespace local_wb_dashboard;
 
 use core\output\html_writer;
+use core_reportbuilder\local\report\base as report_base;
+use core_reportbuilder\manager;
+use core_reportbuilder\permission;
 use local_wb_dashboard\local\chart\chart_type;
 use local_wb_dashboard\local\definition\chart_definition;
 use local_wb_dashboard\local\definition\digits_definition;
@@ -234,5 +237,86 @@ class shortcodes {
         ];
 
         return $OUTPUT->render_from_template('local_wb_dashboard/digits', $context);
+    }
+
+    /**
+     * [downloadreport ...] — render a download button for a custom report that
+     * exports with the current page filters applied.
+     *
+     * The link points at the plugin's own download endpoint; on click, the
+     * filterbus appends the live filter values, which the endpoint translates
+     * into the report's native filters (locked filters are enforced
+     * server-side either way).
+     *
+     * Arguments: report (id), format (enabled dataformat, default "excel"),
+     * label, pageid, consumes (comma-separated filter keys, empty = all).
+     *
+     * @param string $shortcode
+     * @param array $args
+     * @param string|null $content
+     * @param object $env
+     * @param \Closure $next
+     * @return string
+     */
+    public static function downloadreport($shortcode, $args, $content, $env, $next): string {
+        global $OUTPUT;
+
+        $args = (array)$args;
+        $reportid = (int)($args['report'] ?? $args['reportid'] ?? 0);
+        $format = isset($args['format']) ? clean_param($args['format'], PARAM_ALPHA) : 'excel';
+        $pageid = isset($args['pageid']) ? clean_param($args['pageid'], PARAM_ALPHANUMEXT) : 'default';
+        $label = isset($args['label'])
+            ? clean_param($args['label'], PARAM_TEXT)
+            : get_string('downloadreport:label', 'local_wb_dashboard');
+
+        $consumes = [];
+        if (!empty($args['consumes'])) {
+            foreach (explode(',', (string)$args['consumes']) as $key) {
+                $key = clean_param(trim($key), PARAM_ALPHANUMEXT);
+                if ($key !== '') {
+                    $consumes[] = $key;
+                }
+            }
+        }
+
+        if ($reportid <= 0) {
+            return get_string('error:invalidreportid', 'local_wb_dashboard');
+        }
+        $enabledformats = \core_plugin_manager::instance()->get_enabled_plugins('dataformat');
+        if (!isset($enabledformats[$format])) {
+            return get_string('error:unknowndownloadformat', 'local_wb_dashboard', s($format));
+        }
+
+        try {
+            $report = manager::get_report_from_id($reportid);
+        } catch (\Throwable $e) {
+            return get_string('error:invalidreportid', 'local_wb_dashboard');
+        }
+        $persistent = $report->get_report_persistent();
+        if ($persistent->get('type') !== report_base::TYPE_CUSTOM_REPORT) {
+            // Only custom reports have user-scoped filters to apply.
+            return get_string('error:invalidreportid', 'local_wb_dashboard');
+        }
+        try {
+            permission::require_can_view_report($persistent);
+        } catch (\Throwable $e) {
+            // No access: render nothing instead of a broken button.
+            return '';
+        }
+
+        $url = new \moodle_url('/local/wb_dashboard/download.php', [
+            'id' => $reportid,
+            'download' => $format,
+            'sesskey' => sesskey(),
+        ]);
+
+        $context = [
+            'elementid' => html_writer::random_id('local-dashboard-download-'),
+            'url' => $url->out(false),
+            'label' => $label,
+            'pageid' => $pageid,
+            'consumes' => json_encode($consumes),
+        ];
+        return $OUTPUT->render_from_template('local_wb_dashboard/downloadreport', $context);
     }
 }

@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_wb_dashboard';
-$plugin->version   = 2026072701;
+$plugin->version   = 2026072702;
 $plugin->requires  = 2024100700; // Moodle 4.5.
 $plugin->supported = [405, 501];
 $plugin->maturity  = MATURITY_ALPHA;

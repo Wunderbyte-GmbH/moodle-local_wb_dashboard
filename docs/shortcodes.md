@@ -399,7 +399,38 @@ key among their active filters — a report without it returns *unfiltered* data
 
 ---
 
-## 6. A full page example
+## 6. `[downloadreport]`
+
+Renders a **download button** for a Report Builder *custom report* that exports
+the report **with the current page filters applied** — the same values the
+charts on the page are showing, including server-forced locked filters.
+
+```
+[downloadreport report=42 format=csv label="Download course data" consumes=region,period pageid=ops]
+```
+
+| Flag | Values | Default | Meaning |
+|---|---|---|---|
+| `report` | report id | — (required) | The custom report to download. The button is hidden for users without permission to view the report. |
+| `format` | an enabled dataformat (`csv`, `excel`, `ods`, ...) | `excel` | Export format. |
+| `label` | text | *Download report* | Button label. |
+| `consumes` | comma-separated filter keys | *(all)* | Which page filter keys the download applies. Omit to apply every filter the report can map. |
+| `pageid` | alphanumeric | `default` | Page identifier (same as the page's filters and charts). |
+
+On click, the current filter values are appended to the link and translated into
+the report's **native filters** exactly like the chart pipeline does it: keys
+map through the same aliases (full identifier, short name, custom/profile field
+shortname), locked filters are enforced server-side (fail closed), and keys the
+report has no filter for are ignored. The values are applied only for the
+export — the user's own filter state in the report builder UI is untouched.
+
+The report must include the page filters' keys among its **active filters**,
+just like for charts — a report without a matching filter downloads unfiltered
+for that key.
+
+---
+
+## 7. A full page example
 
 ```
 [chartfilter key=period type=date label="From" pageid=team]
@@ -417,7 +448,7 @@ and chart above — each applying `period` through its own report's date filter.
 
 ---
 
-## 7. Per-chart colours (settings gear)
+## 8. Per-chart colours (settings gear)
 
 Charts follow the **active palette** by default. To recolour an individual chart,
 users with the `local/wb_dashboard:configurecharts` capability (managers by default)

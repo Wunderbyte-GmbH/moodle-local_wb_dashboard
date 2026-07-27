@@ -1,0 +1,50 @@
+{{!
+    This file is part of Moodle - http://moodle.org/
+
+    Moodle is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Moodle is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+}}
+{{!
+    @template local_wb_dashboard/downloadreport
+
+    Renders a report download button that exports with the current page
+    filters applied (the filterbus appends the live filter values on click).
+
+    Context variables required for this template:
+    * elementid - Unique DOM id for the link.
+    * url - Endpoint URL (report id, format and sesskey already included).
+    * label - Button label.
+    * pageid - Page identifier for shared filter state.
+    * consumes - JSON array of filter keys the download reacts to ([] = all).
+
+    Example context (json):
+    {
+        "elementid": "local-dashboard-download-1",
+        "url": "/local/wb_dashboard/download.php?id=42&download=excel&sesskey=abc",
+        "label": "Download report",
+        "pageid": "default",
+        "consumes": "[]"
+    }
+}}
+<a id="{{elementid}}"
+    href="{{url}}"
+    class="btn btn-primary local-dashboard-downloadreport"
+    data-region="download-report"
+    data-pageid="{{pageid}}"
+    data-consumes="{{consumes}}">{{label}}</a>
+
+{{#js}}
+require(['local_wb_dashboard/downloadreport'], function(downloadreport) {
+    downloadreport.init({{#quote}}{{elementid}}{{/quote}});
+});
+{{/js}}

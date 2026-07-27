@@ -40,4 +40,9 @@ $shortcodes = [
         'wraps'       => false,
         'description' => 'shortcode:digits',
     ],
+    'downloadreport' => [
+        'callback'    => 'local_wb_dashboard\shortcodes::downloadreport',
+        'wraps'       => false,
+        'description' => 'shortcode:downloadreport',
+    ],
 ];

@@ -59,39 +59,7 @@ class pipeline {
         // Real object-level authorization lives in the source.
         $source->require_access($cleanparams);
 
-        // Locked filter keys are forced server-side: whatever the client
-        // submitted for them is discarded below and the user's own profile
-        // field value is applied instead. They go first so that, if a
-        // same-key client constraint ever slipped through, the source's
-        // first-wins merge keeps the locked value.
-        $locked = locked_filters::for_current_user();
-        $constraints = [];
-        foreach ($locked as $key => $value) {
-            if ($value === '') {
-                // Locked, but no profile field value: fail closed, never unfiltered.
-                throw new moodle_exception('error:lockedfilternovalue', 'local_wb_dashboard', '', $key);
-            }
-            $constraints[] = new filter_constraint($key, filter_constraint::OP_EQUAL, $value, true);
-        }
-        // Sources map keys case-insensitively, so the client skip must be too.
-        $lockedlower = array_change_key_case($locked, CASE_LOWER);
-
-        // Build neutral constraints from the submitted filter values, ignoring
-        // keys this source cannot map.
-        $supported = array_flip($source->get_supported_filter_keys($cleanparams));
-        foreach ($filtervalues as $fv) {
-            if ($fv['value'] === '' || !isset($supported[$fv['key']])) {
-                continue;
-            }
-            if (isset($lockedlower[\core_text::strtolower($fv['key'])])) {
-                continue;
-            }
-            if (!filter_factory::exists($fv['type'])) {
-                continue;
-            }
-            $filter = filter_factory::create($fv['type'], $fv['key']);
-            $constraints[] = $filter->to_constraint($filter->normalize_value($fv['value']));
-        }
+        $constraints = self::build_constraints($source, $cleanparams, $filtervalues);
 
         // Serve the shaped result from cache when an identical request was
         // fetched recently. The key covers the params and every constraint —
@@ -112,5 +80,54 @@ class pipeline {
         $data = $source->fetch($cleanparams, $constraints);
         $cache->set($cachekey, $data);
         return $data;
+    }
+
+    /**
+     * Translate submitted page filter values into neutral constraints.
+     *
+     * Locked filter keys are forced server-side: whatever the client submitted
+     * for them is discarded and the current user's own profile field value is
+     * applied instead. They go first so that, if a same-key client constraint
+     * ever slipped through, the source's first-wins merge keeps the locked
+     * value. Submitted keys the source cannot map are ignored.
+     *
+     * Shared by every consumer that queries a source on the user's behalf
+     * (chart/digits web services via {@see fetch}, the filter-aware report
+     * download endpoint) so locked-filter enforcement cannot diverge.
+     *
+     * @param source_interface $source The resolved source.
+     * @param array $cleanparams Allowlisted source params.
+     * @param array $filtervalues List of {key, type, value} page filter values.
+     * @return filter_constraint[]
+     * @throws moodle_exception When a locked key has no profile field value (fail closed).
+     */
+    public static function build_constraints(source_interface $source, array $cleanparams, array $filtervalues): array {
+        $locked = locked_filters::for_current_user();
+        $constraints = [];
+        foreach ($locked as $key => $value) {
+            if ($value === '') {
+                // Locked, but no profile field value: fail closed, never unfiltered.
+                throw new moodle_exception('error:lockedfilternovalue', 'local_wb_dashboard', '', $key);
+            }
+            $constraints[] = new filter_constraint($key, filter_constraint::OP_EQUAL, $value, true);
+        }
+        // Sources map keys case-insensitively, so the client skip must be too.
+        $lockedlower = array_change_key_case($locked, CASE_LOWER);
+
+        $supported = array_flip($source->get_supported_filter_keys($cleanparams));
+        foreach ($filtervalues as $fv) {
+            if ($fv['value'] === '' || !isset($supported[$fv['key']])) {
+                continue;
+            }
+            if (isset($lockedlower[\core_text::strtolower($fv['key'])])) {
+                continue;
+            }
+            if (!filter_factory::exists($fv['type'])) {
+                continue;
+            }
+            $filter = filter_factory::create($fv['type'], $fv['key']);
+            $constraints[] = $filter->to_constraint($filter->normalize_value($fv['value']));
+        }
+        return $constraints;
     }
 }

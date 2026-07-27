@@ -338,11 +338,14 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
     /**
      * Translate constraints into the report's filter-form value array.
      *
+     * Public because the filter-aware download endpoint reuses the exact same
+     * mapping to export a report with the page filters applied.
+     *
      * @param \core_reportbuilder\datasource $report
      * @param filter_constraint[] $constraints
      * @return array
      */
-    private function build_filter_values($report, array $constraints): array {
+    public function build_filter_values($report, array $constraints): array {
         if (empty($constraints)) {
             return [];
         }
