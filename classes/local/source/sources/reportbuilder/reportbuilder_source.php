@@ -60,7 +60,7 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
         return [
             'idbase', 'fieldbase', 'idtotal', 'fieldtotal',
             'report', 'categoryfield', 'valuefield', 'valuefields', 'remainderof', 'remainderlabel',
-            'stackfield', 'aggregation',
+            'normalize', 'stackfield', 'aggregation',
             'reports',
             'top', 'order',
         ];

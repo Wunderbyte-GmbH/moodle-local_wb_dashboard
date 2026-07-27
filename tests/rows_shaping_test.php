@@ -284,6 +284,55 @@ final class rows_shaping_test extends \advanced_testcase {
     }
 
     /**
+     * normalize=percent scales each remainder stack to 100 and pins the axis.
+     */
+    public function test_normalize_percent_scales_remainder_stacks(): void {
+        $rows = [
+            ['month' => 'Jan', 'sent' => 20, 'delivered' => 15],
+            ['month' => 'Feb', 'sent' => 200, 'delivered' => 150],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'delivered', 'remainderof' => 'sent',
+            'normalize' => 'percent',
+        ], []);
+
+        // Both months: 75% delivered / 25% remainder, despite 10x volumes.
+        $this->assertEquals([75.0, 75.0], $data->series[0]->data);
+        $this->assertEquals([25.0, 25.0], $data->series[1]->data);
+        $this->assertSame(100, $data->meta['axismax']);
+        $this->assertTrue($data->meta['stacked']);
+    }
+
+    /**
+     * normalize=percent also applies to stackfield stacks, skips zero-total
+     * categories, and is ignored for non-stacked data.
+     */
+    public function test_normalize_percent_stackfield_zero_and_unstacked(): void {
+        // Stackfield stack: Jan 10/30 -> 25/75; Feb all zero stays zero.
+        $rows = [
+            ['month' => 'Jan', 'status' => 'a', 'v' => 10],
+            ['month' => 'Jan', 'status' => 'b', 'v' => 30],
+            ['month' => 'Feb', 'status' => 'a', 'v' => 0],
+        ];
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefield' => 'v', 'stackfield' => 'status',
+            'normalize' => 'percent',
+        ], []);
+        $this->assertEquals([25.0, 0.0], $data->series[0]->data);
+        $this->assertEquals([75.0, 0.0], $data->series[1]->data);
+        $this->assertSame(100, $data->meta['axismax']);
+
+        // A plain single series is not normalized.
+        $source = $this->source_returning($this->rows_from(['A' => 10, 'B' => 30]));
+        $data = (new rows_shaping())->shape($source, [
+            'report' => 1, 'categoryfield' => 'coursename', 'valuefield' => 'completions',
+            'normalize' => 'percent',
+        ], []);
+        $this->assertEquals([10.0, 30.0], $data->series[0]->data);
+        $this->assertArrayNotHasKey('axismax', $data->meta);
+    }
+
+    /**
      * Invalid combinations (stackfield, count, or no value field) throw.
      */
     public function test_invalid_multifield_combinations_throw(): void {

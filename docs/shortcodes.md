@@ -86,6 +86,7 @@ Reads every row of one report; each row becomes one data point. An optional
 | `valuefields` | *(optional)* Comma-separated list of numeric fields — one series per field, rendered as grouped bars (e.g. `valuefields=sent,delivered,opened`). Not combinable with `stackfield` or `aggregation=count`. |
 | `remainderof` | *(optional)* Field supplying a **whole** that the `valuefields` are subsets of. The listed fields are stacked and topped up with a computed remainder (`remainderof` − listed fields, never below 0), so the total bar height equals this field — a part-of-whole bar per category. Same combination rules as `valuefields`. |
 | `remainderlabel` | *(optional)* Legend label for the computed remainder segment (default "Remaining"). |
+| `normalize` | *(optional)* `percent` scales every **stacked** bar (from `remainderof` or `stackfield`) to 100%: each category's segments become its percentage split and the value axis is pinned at 0–100, so all bars are equally tall and compare as rates. Ignored for non-stacked shapes. |
 | `stackfield` | *(optional)* Field whose distinct values become separate stacked series. |
 | `aggregation` | *(optional)* `sum` (default) adds up `valuefield` per category; `count` tallies one per row (no `valuefield` needed). |
 | `top` | *(optional)* Keep only the N highest categories (a "top N"). Ranks by each category's total value (its stacked height when `stackfield` is used). Omit for all categories. |

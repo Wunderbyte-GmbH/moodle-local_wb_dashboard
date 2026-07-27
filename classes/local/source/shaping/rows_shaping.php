@@ -89,6 +89,8 @@ class rows_shaping implements shaping_strategy {
         }
         // A one-entry "valuefields" without remainder is just a value field.
         $valuefield = $valuefields[0] ?? $valuefield;
+        // Optional 100%-stack: scale each category's stack to percentages.
+        $percent = strtolower((string)($params['normalize'] ?? '')) === 'percent';
 
         $rows = $source->load_rows($datasetid, $constraints);
         if (empty($rows)) {
@@ -121,9 +123,18 @@ class rows_shaping implements shaping_strategy {
         $data->set_labels(array_map('format_string', $categories));
 
         if ($multifield) {
-            $this->add_field_series($data, $source, $datasetid, $rows, $catkey, $catindex, $valuefields, $remainderof,
-                isset($params['remainderlabel']) ? (string)$params['remainderlabel'] : '');
-            return $this->apply_topn($data, $top, $order);
+            $this->add_field_series(
+                $data,
+                $source,
+                $datasetid,
+                $rows,
+                $catkey,
+                $catindex,
+                $valuefields,
+                $remainderof,
+                isset($params['remainderlabel']) ? (string)$params['remainderlabel'] : ''
+            );
+            return $this->normalize_percent($this->apply_topn($data, $top, $order), $percent);
         }
 
         if ($stackkey === '') {
@@ -151,7 +162,7 @@ class rows_shaping implements shaping_strategy {
             $data->set_meta('stacked', true);
         }
 
-        return $this->apply_topn($data, $top, $order);
+        return $this->normalize_percent($this->apply_topn($data, $top, $order), $percent);
     }
 
     /**
@@ -224,6 +235,38 @@ class rows_shaping implements shaping_strategy {
             : get_string('label:remaining', 'local_wb_dashboard');
         $data->add_series(new chart_series($label, $remainder, [], null, 'group'));
         $data->set_meta('stacked', true);
+    }
+
+    /**
+     * Scale each category's stacked segments to percentages of its total.
+     *
+     * Only applies to stacked data (a remainder stack) when requested: every
+     * category's segments are scaled to sum to 100 and the value axis is
+     * pinned at 100, giving equal-height part-of-whole bars. Categories whose
+     * total is zero keep their zeros. Non-stacked data passes through.
+     *
+     * @param chart_data $data
+     * @param bool $percent Whether normalize=percent was requested.
+     * @return chart_data
+     */
+    private function normalize_percent(chart_data $data, bool $percent): chart_data {
+        if (!$percent || empty($data->meta['stacked'])) {
+            return $data;
+        }
+        foreach (array_keys($data->labels) as $i) {
+            $total = 0.0;
+            foreach ($data->series as $series) {
+                $total += $series->data[$i] ?? 0.0;
+            }
+            if ($total <= 0) {
+                continue;
+            }
+            foreach ($data->series as $series) {
+                $series->data[$i] = round(($series->data[$i] ?? 0.0) / $total * 100, 2);
+            }
+        }
+        $data->set_meta('axismax', 100);
+        return $data;
     }
 
     /**
