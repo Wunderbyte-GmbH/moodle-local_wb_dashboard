@@ -283,7 +283,7 @@ per-user cache, and fans out to every chart on the page that `consumes` the key.
 
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
-| `key` | alphanumeric | — (required) | The logical filter key. Charts reference it via `consumes=`, and the source maps it to its own filtering. |
+| `key` | alphanumeric, or a comma-separated list | — (required) | The logical filter key(s). Charts reference them via `consumes=`, and the source maps them to its own filtering. With several keys one control publishes its value under every key — see *One control, several keys* below. |
 | `type` | `select`, `groupedselect`, `date`, `daterange`, `text`, `number`, `map` | `text` | The control type. |
 | `pageid` | alphanumeric | `default` | Must match the charts' `pageid`. |
 | `label` | text | the key | Visible label. |
@@ -333,6 +333,31 @@ choice is remembered instead.
 [chartfilter key=period type=daterange label="Period" default="2026-01-01|2026-06-30" pageid=demo]
 [chartfilter key=period type=daterange label="Period" default=last12months pageid=demo]
 ```
+
+### One control, several keys
+
+`key` accepts a comma-separated list. The control then publishes its value under
+**every** listed key — one date-range picker can drive charts filtering on user
+creation *and* charts filtering on course completion:
+
+```
+[chartfilter key=usercreated,coursecompleted type=daterange label="Period" pageid=demo]
+[chart ... consumes=usercreated ...]
+[chart ... consumes=coursecompleted ...]
+```
+
+Semantics:
+
+- The same value is submitted once per key; each report applies the keys its own
+  filters support and ignores the rest (as always). A report that has **both**
+  date filters gets both applied (AND) — use `consumes=` on the chart to limit it
+  to one of them.
+- The URL carries one `ldf_<key>` param per key; a deep link with only one of
+  the keys set seeds the control and republishes under all keys.
+- This works for every filter type, not just `daterange`.
+- If **any** of the keys is locked for the viewer, the whole control renders as
+  locked (first locked key's value) — do not combine multi-key with locked keys
+  for `daterange`, which cannot be locked anyway.
 
 ### Grouped select (`groupedselect`)
 

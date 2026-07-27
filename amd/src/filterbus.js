@@ -102,13 +102,14 @@ const persist = () => {
 };
 
 /**
- * Notify every chart that consumes the changed key.
+ * Notify every chart that consumes any of the changed keys, at most once per
+ * chart (a chart consuming several of them must not fetch repeatedly).
  *
- * @param {String} key
+ * @param {String[]} keys
  */
-const notify = (key) => {
+const notify = (keys) => {
     charts.forEach((entry) => {
-        if (entry.keys.length === 0 || entry.keys.indexOf(key) !== -1) {
+        if (entry.keys.length === 0 || entry.keys.some((k) => keys.indexOf(k) !== -1)) {
             entry.api.reload();
         }
     });
@@ -135,19 +136,23 @@ const syncControls = (key, value, origin) => {
 };
 
 /**
- * Handle a control value change.
+ * Handle a control value change: publish the value under every key the
+ * control is registered for (a multi-key control fans one value out to all
+ * of its keys), then persist and notify once.
  *
- * @param {String} key
+ * @param {String[]} keys
  * @param {String} type
  * @param {String} value
  * @param {HTMLElement} origin The control that changed.
  */
-const handleChange = (key, type, value, origin) => {
-    state[key] = {value: value, type: type};
-    syncControls(key, value, origin);
-    updateUrl(key, value);
+const handleChange = (keys, type, value, origin) => {
+    keys.forEach((key) => {
+        state[key] = {value: value, type: type};
+        syncControls(key, value, origin);
+        updateUrl(key, value);
+    });
     persist();
-    notify(key);
+    notify(keys);
 };
 
 /**
@@ -173,6 +178,8 @@ export default {
     /**
      * Register a filter control element (by id) with the bus. Several controls
      * may register the same key; they act as one filter and are kept in sync.
+     * A control may declare several keys (data-filter-keys, comma-separated):
+     * it then publishes one value under every key.
      *
      * @param {String} controlId
      */
@@ -186,30 +193,37 @@ export default {
         if (!wrapper) {
             return;
         }
-        const key = wrapper.dataset.filterKey;
+        const keys = (wrapper.dataset.filterKeys || wrapper.dataset.filterKey || '')
+            .split(',').filter(Boolean);
+        if (!keys.length) {
+            return;
+        }
         const type = wrapper.dataset.filterType;
         pageid = wrapper.dataset.pageid || pageid;
 
-        // URL state and an already-registered control for the same key win
-        // over this control's server-rendered (cache) value.
-        const fromurl = new URLSearchParams(window.location.search).has(URL_PREFIX + key);
-        const registered = controls[key] || [];
-        if (state[key] && typeof state[key].value !== 'undefined' && (fromurl || registered.length > 0)) {
-            if (registered.length === 0) {
-                // Replace the placeholder type stamped while reading the URL.
-                state[key].type = type;
-            }
-            if (control.value !== state[key].value) {
-                control.value = state[key].value;
-                control.dispatchEvent(new CustomEvent(eventTypes.reflect));
-            }
-        } else {
-            state[key] = {value: control.value, type: type};
+        // URL state and an already-registered control for the same key win over
+        // this control's server-rendered (cache) value. First winning key
+        // supplies the seed; controls with overlapping-but-different key sets
+        // are not reconciled beyond that (same limitation as before, per key).
+        const params = new URLSearchParams(window.location.search);
+        const winner = keys.find((key) =>
+            state[key] && typeof state[key].value !== 'undefined'
+            && (params.has(URL_PREFIX + key) || (controls[key] || []).length > 0));
+        const seed = winner ? state[winner].value : control.value;
+        if (winner && control.value !== seed) {
+            control.value = seed;
+            control.dispatchEvent(new CustomEvent(eventTypes.reflect));
         }
-        controls[key] = registered;
-        controls[key].push(control);
 
-        const onChange = debounce(() => handleChange(key, type, control.value, control), DEBOUNCE_MS);
+        // Claim every key: the state entry fixes the placeholder type stamped
+        // while reading the URL, so fan-out keys keep the control's real type.
+        keys.forEach((key) => {
+            state[key] = {value: seed, type: type};
+            controls[key] = controls[key] || [];
+            controls[key].push(control);
+        });
+
+        const onChange = debounce(() => handleChange(keys, type, control.value, control), DEBOUNCE_MS);
         control.addEventListener('change', onChange);
         control.addEventListener('input', onChange);
     },

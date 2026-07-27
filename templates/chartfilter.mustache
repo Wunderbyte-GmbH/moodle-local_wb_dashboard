@@ -21,7 +21,8 @@
 
     Context variables required for this template:
     * id - Unique DOM id for the control.
-    * key - Logical filter key.
+    * key - Primary logical filter key.
+    * keys - Comma-separated list of all keys the control publishes to (>= 1).
     * type - Filter type (select|groupedselect|date|daterange|text|number|map).
     * label - Visible label.
     * value - Current value.
@@ -40,6 +41,7 @@
     {
         "id": "local-dashboard-filter-1",
         "key": "period",
+        "keys": "period",
         "type": "date",
         "label": "Period",
         "value": "",
@@ -53,7 +55,7 @@
     }
 }}
 <div class="local-dashboard-filter form-group wb-palette-{{palettename}}" data-region="chart-filter"
-     data-filter-key="{{key}}" data-filter-type="{{type}}" data-pageid="{{pageid}}">
+     data-filter-key="{{key}}" data-filter-keys="{{keys}}" data-filter-type="{{type}}" data-pageid="{{pageid}}">
     <label for="{{id}}" class="local-dashboard-filter-label">{{label}}</label>
     {{#islocked}}
         <span id="{{id}}" class="form-control-plaintext local-dashboard-filter-locked">{{value}}</span>

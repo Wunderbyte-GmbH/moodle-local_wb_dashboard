@@ -16,8 +16,11 @@
 
 namespace local_wb_dashboard;
 
+use local_wb_dashboard\local\dto\chart_data;
 use local_wb_dashboard\local\dto\filter_constraint;
 use local_wb_dashboard\local\filter\filter_factory;
+use local_wb_dashboard\local\source\pipeline;
+use local_wb_dashboard\local\source\source_interface;
 
 /**
  * Tests for the filter Factory: creation, value normalization and neutral
@@ -32,6 +35,7 @@ use local_wb_dashboard\local\filter\filter_factory;
  * @covers     \local_wb_dashboard\local\filter\daterange_filter
  * @covers     \local_wb_dashboard\local\filter\number_filter
  * @covers     \local_wb_dashboard\local\filter\text_filter
+ * @covers     \local_wb_dashboard\local\source\pipeline
  */
 final class filter_factory_test extends \advanced_testcase {
     public function test_select_produces_equal_constraint(): void {
@@ -79,5 +83,48 @@ final class filter_factory_test extends \advanced_testcase {
     public function test_unknown_type_throws(): void {
         $this->expectException(\moodle_exception::class);
         filter_factory::create('slider', 'x', []);
+    }
+
+    /**
+     * The server contract a multi-key filter control relies on: the client
+     * submits the same daterange value under N keys, and build_constraints
+     * turns them into N independent BETWEEN constraints.
+     */
+    public function test_same_value_under_two_keys_yields_two_constraints(): void {
+        $source = new class implements source_interface {
+            #[\Override]
+            public static function get_name(): string {
+                return 'stub';
+            }
+            #[\Override]
+            public function required_params(): array {
+                return [];
+            }
+            #[\Override]
+            public function get_supported_filter_keys(array $sourceparams): array {
+                return ['usercreated', 'coursecompleted'];
+            }
+            #[\Override]
+            public function require_access(array $sourceparams): void {
+            }
+            #[\Override]
+            public function fetch(array $sourceparams, array $constraints): chart_data {
+                return new chart_data();
+            }
+        };
+
+        $constraints = pipeline::build_constraints($source, [], [
+            ['key' => 'usercreated', 'type' => 'daterange', 'value' => '2026-01-01|2026-06-30'],
+            ['key' => 'coursecompleted', 'type' => 'daterange', 'value' => '2026-01-01|2026-06-30'],
+        ]);
+
+        $this->assertCount(2, $constraints);
+        $this->assertSame('usercreated', $constraints[0]->key);
+        $this->assertSame('coursecompleted', $constraints[1]->key);
+        foreach ($constraints as $constraint) {
+            $this->assertSame(filter_constraint::OP_BETWEEN, $constraint->operator);
+        }
+        // Both carry the identical normalized [from, to] pair.
+        $this->assertSame($constraints[0]->value, $constraints[1]->value);
     }
 }

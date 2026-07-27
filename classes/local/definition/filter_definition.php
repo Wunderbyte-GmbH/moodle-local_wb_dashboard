@@ -30,8 +30,11 @@ class filter_definition {
     /** Reserved keys handled by the plugin (rest become filter config). */
     private const RESERVED = ['key', 'type', 'pageid'];
 
-    /** @var string Logical filter key (shared page vocabulary). */
+    /** @var string Primary (first) logical filter key (shared page vocabulary). */
     public string $key;
+
+    /** @var string[] All logical keys this control publishes to (>= 1 when valid). */
+    public array $keys;
 
     /** @var string Filter UI type (select|date|text|number|map). */
     public string $type;
@@ -49,9 +52,11 @@ class filter_definition {
      * @param string $type
      * @param array $config
      * @param string $pageid
+     * @param string[] $keys All keys; defaults to [$key].
      */
-    public function __construct(string $key, string $type, array $config, string $pageid) {
+    public function __construct(string $key, string $type, array $config, string $pageid, array $keys = []) {
         $this->key = $key;
+        $this->keys = $keys ?: ($key !== '' ? [$key] : []);
         $this->type = $type;
         $this->config = $config;
         $this->pageid = $pageid;
@@ -60,11 +65,24 @@ class filter_definition {
     /**
      * Build a definition from raw [chartfilter] shortcode arguments.
      *
+     * The key arg accepts a comma-separated list: one control then publishes
+     * its value under every listed key (e.g. key=usercreated,coursecompleted
+     * lets one date range drive both date fields). The first key is the
+     * primary one used for display/prefill.
+     *
      * @param array $args
      * @return self
      */
     public static function create_definition_from_shortcode_args(array $args): self {
-        $key = isset($args['key']) ? clean_param($args['key'], PARAM_ALPHANUMEXT) : '';
+        // Split before cleaning: PARAM_ALPHANUMEXT would strip the commas.
+        $keys = [];
+        foreach (explode(',', (string)($args['key'] ?? '')) as $part) {
+            $part = clean_param(trim($part), PARAM_ALPHANUMEXT);
+            if ($part !== '' && !in_array($part, $keys, true)) {
+                $keys[] = $part;
+            }
+        }
+        $key = $keys[0] ?? '';
         $type = isset($args['type']) ? clean_param($args['type'], PARAM_ALPHA) : 'text';
         $pageid = isset($args['pageid']) ? clean_param($args['pageid'], PARAM_ALPHANUMEXT) : 'default';
 
@@ -76,6 +94,6 @@ class filter_definition {
             $config[(string)$k] = (string)$v;
         }
 
-        return new self($key, $type, $config, $pageid);
+        return new self($key, $type, $config, $pageid, $keys);
     }
 }

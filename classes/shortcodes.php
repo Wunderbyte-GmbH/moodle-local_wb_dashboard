@@ -111,9 +111,12 @@ class shortcodes {
 
         // A locked key is forced server-side to the user's profile field value
         // (see locked_filters), so the user gets a static value instead of a
-        // control — or nothing at all with hidewhenlocked="1".
+        // control — or nothing at all with hidewhenlocked="1". For a multi-key
+        // control, ANY locked key locks the whole control: a free control whose
+        // sibling keys are force-overridden server-side would be incoherent.
         $lockedvalues = locked_filters::for_current_user();
-        $islocked = array_key_exists($definition->key, $lockedvalues);
+        $lockedkeys = array_values(array_intersect($definition->keys, array_keys($lockedvalues)));
+        $islocked = !empty($lockedkeys);
         if ($islocked && !empty($definition->config['hidewhenlocked'])) {
             return '';
         }
@@ -123,7 +126,7 @@ class shortcodes {
 
         if ($islocked) {
             // Show the option/region label where one matches the forced value.
-            $lockedvalue = $lockedvalues[$definition->key];
+            $lockedvalue = $lockedvalues[$lockedkeys[0]];
             $display = $lockedvalue;
             foreach ($context['options'] ?? [] as $option) {
                 if ((string)$option['value'] === $lockedvalue) {
@@ -185,6 +188,7 @@ class shortcodes {
         }
 
         $context['pageid'] = $definition->pageid;
+        $context['keys'] = implode(',', $definition->keys);
         $context['palettename'] = palette_manager::name();
         $context['islocked'] = $islocked;
         $context['isselect'] = !$islocked && ($definition->type === 'select');
