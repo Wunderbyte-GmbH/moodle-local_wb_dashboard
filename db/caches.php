@@ -25,6 +25,17 @@
 defined('MOODLE_INTERNAL') || die();
 
 $definitions = [
+    // Shaped chart data, keyed by a hash of source + params + constraints.
+    // Shared across users: object-level access is enforced before every read,
+    // and per-user forced (locked) filter values are part of the key. The TTL
+    // bounds staleness — dashboards tolerate a few minutes of it in exchange
+    // for not re-running the report query per chart, viewer and filter change.
+    'chartdata' => [
+        'mode'         => cache_store::MODE_APPLICATION,
+        'simplekeys'   => true,
+        'simpledata'   => false,
+        'ttl'          => 300,
+    ],
     // Dynamic select-filter options, keyed by a hash of source + params + field.
     // Options are user-independent (access is checked before every read), but the
     // fallback path runs a full report query, so results are shared and TTL-bound.

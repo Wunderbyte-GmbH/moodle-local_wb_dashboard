@@ -93,6 +93,24 @@ class pipeline {
             $constraints[] = $filter->to_constraint($filter->normalize_value($fv['value']));
         }
 
-        return $source->fetch($cleanparams, $constraints);
+        // Serve the shaped result from cache when an identical request was
+        // fetched recently. The key covers the params and every constraint —
+        // including locked per-user values — so entries are safely shared;
+        // require_access() above has already vetted this user.
+        $cachekey = sha1(json_encode([
+            $sourcename,
+            $cleanparams,
+            array_map(static fn(filter_constraint $c): array =>
+                [$c->key, $c->operator, $c->value, $c->locked], $constraints),
+        ]));
+        $cache = \cache::make('local_wb_dashboard', 'chartdata');
+        $cached = $cache->get($cachekey);
+        if ($cached instanceof chart_data) {
+            return $cached;
+        }
+
+        $data = $source->fetch($cleanparams, $constraints);
+        $cache->set($cachekey, $data);
+        return $data;
     }
 }

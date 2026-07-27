@@ -28,6 +28,7 @@ $string['activemonth:firstlogin'] = 'First login in month';
 $string['activemonth:lastlogin'] = 'Last login in month';
 $string['activemonth:logins'] = 'Logins in month';
 $string['activemonth:month'] = 'Month';
+$string['cachedef_chartdata'] = 'Shaped chart data';
 $string['cachedef_filteroptions'] = 'Dynamic filter dropdown options';
 $string['cachedef_pagefilterstate'] = 'Per-user page filter state';
 $string['chart'] = 'Chart';
