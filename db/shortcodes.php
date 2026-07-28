@@ -35,6 +35,11 @@ $shortcodes = [
         'wraps'       => false,
         'description' => 'shortcode:chartfilter',
     ],
+    'filterreset' => [
+        'callback'    => 'local_wb_dashboard\shortcodes::filterreset',
+        'wraps'       => false,
+        'description' => 'shortcode:filterreset',
+    ],
     'digits' => [
         'callback'    => 'local_wb_dashboard\shortcodes::digits',
         'wraps'       => false,

@@ -239,6 +239,29 @@ export default {
     },
 
     /**
+     * Clear every filter: blank all state, controls and ldf_* URL params,
+     * persist the empty state and reload all charts once.
+     */
+    reset: () => {
+        ensureUrlLoaded();
+        const keys = Object.keys(state);
+        keys.forEach((key) => {
+            state[key] = {value: '', type: state[key].type};
+            (controls[key] || []).forEach((control) => {
+                if (control.value !== '') {
+                    control.value = '';
+                    control.dispatchEvent(new CustomEvent(eventTypes.reflect));
+                }
+            });
+            updateUrl(key, '');
+        });
+        if (keys.length) {
+            persist();
+            notify(keys);
+        }
+    },
+
+    /**
      * Return the current {key, type, value} triples for the given keys
      * ([] = all), skipping empty values.
      *

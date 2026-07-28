@@ -208,6 +208,39 @@ final class rows_shaping_test extends \advanced_testcase {
     }
 
     /**
+     * valuelabels overrides the legend labels of the value-field series by
+     * position; missing entries fall back to the field name.
+     */
+    public function test_valuelabels_override_series_labels(): void {
+        $rows = [
+            ['month' => 'Jan', 'sent' => 10, 'delivered' => 8],
+        ];
+
+        // Multi-field: positional override, missing entry falls back.
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'sent,delivered',
+            'valuelabels' => 'Inviati',
+        ], []);
+        $this->assertSame('Inviati', $data->series[0]->label);
+        $this->assertSame('delivered', $data->series[1]->label);
+
+        // Remainder stack: the value series is renamed, the remainder keeps its own label.
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefields' => 'delivered',
+            'valuelabels' => 'Consegnati', 'remainderof' => 'sent', 'remainderlabel' => 'Non consegnati',
+        ], []);
+        $this->assertSame('Consegnati', $data->series[0]->label);
+        $this->assertSame('Non consegnati', $data->series[1]->label);
+
+        // Single series without remainder.
+        $data = (new rows_shaping())->shape($this->source_returning($rows), [
+            'report' => 1, 'categoryfield' => 'month', 'valuefield' => 'delivered',
+            'valuelabels' => 'Consegnati',
+        ], []);
+        $this->assertSame('Consegnati', $data->series[0]->label);
+    }
+
+    /**
      * remainderof stacks the listed fields plus a computed remainder, so the
      * bar total equals the remainder field.
      */

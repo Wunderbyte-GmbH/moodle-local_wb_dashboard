@@ -203,6 +203,33 @@ class shortcodes {
     }
 
     /**
+     * [filterreset ...] — render a button that clears every page filter.
+     *
+     * Arguments: label (button text, default from lang).
+     *
+     * @param string $shortcode
+     * @param array $args
+     * @param string|null $content
+     * @param object $env
+     * @param \Closure $next
+     * @return string
+     */
+    public static function filterreset($shortcode, $args, $content, $env, $next): string {
+        global $OUTPUT;
+
+        $args = (array)$args;
+        $label = isset($args['label'])
+            ? clean_param($args['label'], PARAM_TEXT)
+            : get_string('filterreset:label', 'local_wb_dashboard');
+
+        $context = [
+            'elementid' => html_writer::random_id('local-dashboard-filterreset-'),
+            'label' => $label,
+        ];
+        return $OUTPUT->render_from_template('local_wb_dashboard/filterreset', $context);
+    }
+
+    /**
      * [digits ...] — render a single numeric value (number, count or percentage)
      * as a styleable DOM field. Data is loaded client-side via the web service.
      *

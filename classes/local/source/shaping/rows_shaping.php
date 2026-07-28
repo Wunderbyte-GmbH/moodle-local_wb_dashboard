@@ -31,7 +31,9 @@ use moodle_exception;
  * topped up with a computed remainder segment (remainderof minus the listed
  * fields), so the total bar height equals the remainderof field — e.g.
  * valuefields=delivered remainderof=sent renders delivered as a subset of all
- * sent. Neither combines with "stackfield" or aggregation=count.
+ * sent. Neither combines with "stackfield" or aggregation=count. A
+ * comma-separated "valuelabels" list overrides the legend labels of the
+ * value-field series by position (the remainder keeps "remainderlabel").
  *
  * Suited to bar/stacked/horizontal charts.
  *
@@ -87,6 +89,12 @@ class rows_shaping implements shaping_strategy {
         if ($multifield && ($iscount || $stackfield !== '' || empty($valuefields))) {
             throw new moodle_exception('error:invalidfieldcombination', 'local_wb_dashboard');
         }
+        // Optional legend labels for the value-field series, positionally
+        // matching "valuefields"; missing entries fall back to the field name.
+        $valuelabels = [];
+        if (!empty($params['valuelabels'])) {
+            $valuelabels = array_map('trim', explode(',', (string)$params['valuelabels']));
+        }
         // A one-entry "valuefields" without remainder is just a value field.
         $valuefield = $valuefields[0] ?? $valuefield;
         // Optional 100%-stack: scale each category's stack to percentages.
@@ -112,7 +120,7 @@ class rows_shaping implements shaping_strategy {
         };
         $serieslabel = $iscount
             ? get_string('label:count', 'local_wb_dashboard')
-            : format_string($valuefield);
+            : format_string(($valuelabels[0] ?? '') !== '' ? $valuelabels[0] : $valuefield);
 
         // Preserve first-seen category order; the id of a category is the
         // first-seen row's id (formatted cells may carry markup — strip it).
@@ -146,6 +154,7 @@ class rows_shaping implements shaping_strategy {
                 $catkey,
                 $catindex,
                 $valuefields,
+                $valuelabels,
                 $remainderof,
                 isset($params['remainderlabel']) ? (string)$params['remainderlabel'] : ''
             );
@@ -196,6 +205,8 @@ class rows_shaping implements shaping_strategy {
      * @param string $catkey Resolved category row key.
      * @param array $catindex Category value => data index map.
      * @param string[] $valuefields The fields to plot, one series each.
+     * @param string[] $valuelabels Legend labels matching $valuefields by position;
+     *                              missing or empty entries fall back to the field name.
      * @param string $remainderof Field supplying the stacked total ('' = none).
      * @param string $remainderlabel Label for the remainder segment ('' = default).
      */
@@ -207,6 +218,7 @@ class rows_shaping implements shaping_strategy {
         string $catkey,
         array $catindex,
         array $valuefields,
+        array $valuelabels,
         string $remainderof,
         string $remainderlabel
     ): void {
@@ -230,8 +242,11 @@ class rows_shaping implements shaping_strategy {
         }
 
         $stack = $remainderof !== '' ? 'group' : null;
+        $fieldindex = 0;
         foreach ($totals as $field => $values) {
-            $data->add_series(new chart_series(format_string((string)$field), $values, [], null, $stack));
+            $label = ($valuelabels[$fieldindex] ?? '') !== '' ? $valuelabels[$fieldindex] : (string)$field;
+            $fieldindex++;
+            $data->add_series(new chart_series(format_string($label), $values, [], null, $stack));
         }
         if ($remainderof === '') {
             return;

@@ -56,6 +56,7 @@ $string['daterangefilter:from'] = 'from';
 $string['daterangefilter:to'] = 'to';
 $string['downloadreport:label'] = 'Download report';
 $string['entity:activemonth'] = 'Active month';
+$string['filterreset:label'] = 'Reset filters';
 $string['entity:activityprogress'] = 'Activity completion progress';
 $string['error:invalidfieldcombination'] = 'The "valuefields"/"remainderof" parameters need at least one value field and cannot be combined with "stackfield" or aggregation=count.';
 $string['error:invalidreportid'] = 'Invalid or missing report id.';
@@ -92,6 +93,7 @@ $string['shortcode:chart'] = 'Render a chart from a data source (type, source an
 $string['shortcode:chartfilter'] = 'Render a page-level filter control that all charts on the page react to.';
 $string['shortcode:digits'] = 'Render a single numeric value (number, count or percentage) as a styleable field.';
 $string['shortcode:downloadreport'] = 'Render a download button for a custom report that exports with the current page filters applied.';
+$string['shortcode:filterreset'] = 'Render a button that clears every page filter.';
 $string['shortcode:toplist'] = 'Render a ranked top-N list with a progress bar per row.';
 $string['subplugintype_wbdashboardpalette'] = 'Dashboard palette';
 $string['subplugintype_wbdashboardpalette_plural'] = 'Dashboard palettes';

@@ -177,6 +177,15 @@ class active_month extends base {
 
         $filters[] = (new filter(
             date::class,
+            'firstlogin',
+            new lang_string('activemonth:firstlogin', 'local_wb_dashboard'),
+            $this->get_entity_name(),
+            "{$tablealias}.firstlogin"
+        ))
+            ->add_joins($this->get_joins());
+
+        $filters[] = (new filter(
+            date::class,
             'lastlogin',
             new lang_string('activemonth:lastlogin', 'local_wb_dashboard'),
             $this->get_entity_name(),
