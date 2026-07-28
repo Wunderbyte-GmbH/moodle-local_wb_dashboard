@@ -59,3 +59,57 @@ users only while a single month is in range).
 
 Regional split: add the user *Region* profile field filter to the report and a
 matching `[chartfilter key=region ...]` on the page.
+
+## Quiz completions
+
+**Datasource:** *Quiz completions*
+(`local_wb_dashboard\reportbuilder\datasource\quiz_completions`)
+
+One row per **quiz and per user with an activity completion record** on that
+quiz. A new report starts with the *Quiz completed* condition set to *Yes*, so
+by default **counting rows counts quiz completions** ("completed" = activity
+completion state *complete* or *complete-pass*; *failed* does not count).
+Removing the condition also surfaces viewed/failed completion rows plus one
+user-less row per quiz without any completion data.
+
+Notes:
+
+- "Completion" is the **activity completion** of the quiz course module, not a
+  finished attempt. The number of finished (non-preview) attempts is available
+  as its own column and number filter.
+- Quizzes with completion tracking disabled never produce completed rows.
+- Deleted users are excluded; enrolment status is not checked (completions of
+  meanwhile unenrolled users still count).
+
+### Entities
+
+- **Quiz completion** (`quiz_completion`) — columns: *Quiz name* (plain and
+  with link), *Quiz completed* (yes/no), *Completion state* (not completed /
+  completed / pass / fail), *Time completed*, *Finished attempts*.
+  Filters/conditions: **Quiz** (select listing every quiz as "Course: Quiz",
+  the filter to pin a report to one quiz), *Quiz name* (text),
+  *Quiz completed* (yes/no), *Time completed* (date), *Finished attempts*
+  (number).
+- **Course** and **User** — the full core entities, so course filters and user
+  profile field filters work as usual.
+
+### Recipes
+
+Completions of one specific quiz as a number: report on this source (the
+default *Quiz completed = Yes* condition already restricts it to completions),
+set the **Quiz** condition to the quiz — or leave it a filter and let the page
+choose:
+
+```
+[chartfilter key=quizselect type=select optionsfield=quizselect label="Quiz" report=<id> pageid=...]
+[digits source=reportbuilder display=count report=<id> pageid=...]
+```
+
+(The dropdown options come from the report's own *Quiz* select filter, so they
+are always the "Course: Quiz" list and pass core's filter validation.)
+
+Completions per quiz (bar chart): add the quiz name column and
+
+```
+[chart type=bar source=reportbuilder report=<id> categoryfield=name aggregation=count]
+```
