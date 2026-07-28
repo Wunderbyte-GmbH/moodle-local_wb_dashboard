@@ -124,7 +124,12 @@ class course_activity_progress extends datasource {
                 'course' => $course,
                 'user' => $user,
             ]);
-        $coursecompletion = $completionentity->get_table_alias('course_completions');
+        // The completion entity's alias key for the course_completions table was
+        // 'course_completion' before Moodle 5.0 and 'course_completions' from 5.0
+        // onwards (MDL-84135), so pick the right one to keep 4.5 support.
+        global $CFG;
+        $cckey = $CFG->branch >= 500 ? 'course_completions' : 'course_completion';
+        $coursecompletion = $completionentity->get_table_alias($cckey);
         $this->add_entity($completionentity
             ->add_joins($userentity->get_joins())
             ->add_join("
