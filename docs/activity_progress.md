@@ -20,7 +20,10 @@ The **Completed all activities except** filter matches users who completed every
 trackable activity apart from a comma-separated list (by course module id or by
 idnumber; idnumbers are more portable across staging/production). The stricter
 operator additionally requires that none of the listed activities are complete.
-An empty list disables the filter.
+The filter only matches rows of courses that contain at least one of the listed
+activities — other courses a user has fully completed (or courses without
+trackable activities) are excluded rather than trivially matching. An empty
+list disables the filter.
 
 ## Deliberate divergence from core
 

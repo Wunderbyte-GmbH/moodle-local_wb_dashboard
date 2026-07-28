@@ -55,6 +55,12 @@ use core_reportbuilder\local\helpers\database;
  *
  *     ['cmalias' => ..., 'coursealias' => ..., 'useralias' => ...]
  *
+ * The filter is scoped to the courses actually containing the listed
+ * activities: a row only matches when its course contains at least one of them
+ * (via an EXISTS clause on the course alias). Without this, "remaining minus
+ * excluded = 0" would also match every row of unrelated courses the user has
+ * fully completed - and every row of courses without trackable activities.
+ *
  * The second operator additionally asserts that none of the listed activities
  * are complete (state COMPLETION_COMPLETE or COMPLETION_COMPLETE_PASS) for the
  * user, via a NOT EXISTS clause built from the course/user aliases. Consistent
@@ -69,7 +75,6 @@ use core_reportbuilder\local\helpers\database;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class completed_all_except extends base {
-
     /** @var string Placeholder in the field SQL replaced by the exclusion list clause */
     public const TOKEN_EXCLUSION = '[[EXCLUSION]]';
 
@@ -109,17 +114,29 @@ class completed_all_except extends base {
     public function setup_form(MoodleQuickForm $mform): void {
         $elements = [];
 
-        $elements['operator'] = $mform->createElement('select', "{$this->name}_operator",
-            get_string('filterfieldoperator', 'core_reportbuilder', $this->get_header()), $this->get_operators());
+        $elements['operator'] = $mform->createElement(
+            'select',
+            "{$this->name}_operator",
+            get_string('filterfieldoperator', 'core_reportbuilder', $this->get_header()),
+            $this->get_operators()
+        );
 
-        $elements['identifier'] = $mform->createElement('select', "{$this->name}_identifier",
-            get_string('completedallexcept:identifier', 'local_wb_dashboard'), [
+        $elements['identifier'] = $mform->createElement(
+            'select',
+            "{$this->name}_identifier",
+            get_string('completedallexcept:identifier', 'local_wb_dashboard'),
+            [
                 self::IDENTIFIER_IDNUMBER => get_string('completedallexcept:identifier:idnumber', 'local_wb_dashboard'),
                 self::IDENTIFIER_CMID => get_string('completedallexcept:identifier:cmid', 'local_wb_dashboard'),
-            ]);
+            ]
+        );
 
-        $elements['values'] = $mform->createElement('text', "{$this->name}_values",
-            get_string('completedallexcept:activities', 'local_wb_dashboard'), ['size' => 20]);
+        $elements['values'] = $mform->createElement(
+            'text',
+            "{$this->name}_values",
+            get_string('completedallexcept:activities', 'local_wb_dashboard'),
+            ['size' => 20]
+        );
 
         $mform->addGroup($elements, "{$this->name}_grp", $this->get_header(), '', false)
             ->setHiddenLabel(true);
@@ -165,19 +182,44 @@ class completed_all_except extends base {
 
         // Replace the placeholder with the exclusion clause: the listed activities
         // must not count towards the user's remaining activities.
-        [$notinsql, $notinparams] = $DB->get_in_or_equal($identifiers, SQL_PARAMS_NAMED,
-            database::generate_param_name() . '_', false);
+        [$notinsql, $notinparams] = $DB->get_in_or_equal(
+            $identifiers,
+            SQL_PARAMS_NAMED,
+            database::generate_param_name() . '_',
+            false
+        );
         $matchsql = $this->get_match_sql($options['cmalias'], $identifier);
         $fieldsql = str_replace(self::TOKEN_EXCLUSION, "AND {$matchsql} {$notinsql}", $fieldsql);
         $params += $notinparams;
 
-        $sql = "{$fieldsql} = 0";
+        // Scope the filter to the courses containing the listed activities: without
+        // this, "remaining minus excluded = 0" also matches rows of unrelated courses
+        // the user has fully completed (see the class docblock).
+        $scopecm = database::generate_alias();
+        [$scopeinsql, $scopeinparams] = $DB->get_in_or_equal(
+            $identifiers,
+            SQL_PARAMS_NAMED,
+            database::generate_param_name() . '_'
+        );
+
+        $sql = "{$fieldsql} = 0
+            AND EXISTS (
+                SELECT 1
+                  FROM {course_modules} {$scopecm}
+                 WHERE {$scopecm}.course = {$options['coursealias']}.id
+                       AND {$scopecm}.deletioninprogress = 0
+                       AND " . $this->get_match_sql($scopecm, $identifier) . " {$scopeinsql}
+            )";
+        $params += $scopeinparams;
 
         if ($operator === self::OPERATOR_EXCEPT_NONE_COMPLETE) {
             // Additionally assert that none of the listed activities are complete for the user.
             [$cm, $cmc] = database::generate_aliases(2);
-            [$insql, $inparams] = $DB->get_in_or_equal($identifiers, SQL_PARAMS_NAMED,
-                database::generate_param_name() . '_');
+            [$insql, $inparams] = $DB->get_in_or_equal(
+                $identifiers,
+                SQL_PARAMS_NAMED,
+                database::generate_param_name() . '_'
+            );
 
             $sql .= "
                 AND NOT EXISTS (
@@ -205,7 +247,7 @@ class completed_all_except extends base {
      * @return array of clean identifiers (ints for cmids, strings for idnumbers), empty if none are usable
      */
     private function parse_identifiers(string $raw, int $identifier): array {
-        $values = array_filter(array_map('trim', explode(',', $raw)), static function(string $value): bool {
+        $values = array_filter(array_map('trim', explode(',', $raw)), static function (string $value): bool {
             return $value !== '';
         });
 

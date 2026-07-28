@@ -265,9 +265,25 @@ final class course_activity_progress_test extends core_reportbuilder_testcase {
         // User three still has module C left.
         $this->set_completion_state($moduleb->cmid, (int) $user3->id, COMPLETION_COMPLETE);
 
+        // A second course not containing any of the listed activities: fully
+        // completed by user two and without trackable activities for user one.
+        // Neither row may match the filter - it is scoped to the courses
+        // containing the listed activities.
+        $othercourse = $this->getDataGenerator()->create_course(['enablecompletion' => 1]);
+        $othermodule = $this->getDataGenerator()->create_module(
+            'page',
+            ['course' => $othercourse->id, 'completion' => COMPLETION_TRACKING_MANUAL]
+        );
+        $this->getDataGenerator()->enrol_user($user2->id, $othercourse->id, 'student');
+        $this->set_completion_state($othermodule->cmid, (int) $user2->id, COMPLETION_COMPLETE);
+
+        $emptycourse = $this->getDataGenerator()->create_course(['enablecompletion' => 1]);
+        $this->getDataGenerator()->enrol_user($user1->id, $emptycourse->id, 'student');
+
         $report = $this->create_username_report([], ['activity_progress:completedallexcept']);
 
-        // Completed everything except module A (by course module id): users one and two.
+        // Completed everything except module A (by course module id): users one and
+        // two, each with their single row of the course containing module A.
         $rows = $this->get_user_rows($report->id, [
             'activity_progress:completedallexcept_operator' => completed_all_except::OPERATOR_EXCEPT,
             'activity_progress:completedallexcept_identifier' => completed_all_except::IDENTIFIER_CMID,
@@ -291,13 +307,14 @@ final class course_activity_progress_test extends core_reportbuilder_testcase {
         ]);
         $this->assertEquals([['user1']], $rows);
 
-        // Empty activity list: the filter is a no-op.
+        // Empty activity list: the filter is a no-op, so the enrolments in the
+        // other two courses show up as additional rows.
         $rows = $this->get_user_rows($report->id, [
             'activity_progress:completedallexcept_operator' => completed_all_except::OPERATOR_EXCEPT,
             'activity_progress:completedallexcept_identifier' => completed_all_except::IDENTIFIER_CMID,
             'activity_progress:completedallexcept_values' => ' , ',
         ]);
-        $this->assertEquals([['user1'], ['user2'], ['user3']], $rows);
+        $this->assertEquals([['user1'], ['user1'], ['user2'], ['user2'], ['user3']], $rows);
     }
 
     /**
