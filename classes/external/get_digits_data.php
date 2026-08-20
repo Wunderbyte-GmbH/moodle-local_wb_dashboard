@@ -24,6 +24,7 @@ use core_external\external_single_structure;
 use core_external\external_value;
 use local_wb_dashboard\local\digits\digits_reducer;
 use local_wb_dashboard\local\digits\digits_result;
+use local_wb_dashboard\local\dto\chart_data;
 use local_wb_dashboard\local\source\pipeline;
 use moodle_exception;
 
@@ -118,6 +119,7 @@ class get_digits_data extends external_api {
         // to draw).
         try {
             $dto = pipeline::fetch($params['source'], $params['sourceparams'], $params['filtervalues']);
+            $dto = self::apply_percent_target($dto, $params['display'], $params['sourceparams']);
             $result = digits_reducer::reduce($dto, $params['display']);
         } catch (moodle_exception $e) {
             if ($e->errorcode !== 'error:noreportdata') {
@@ -144,6 +146,35 @@ class get_digits_data extends external_api {
             'ispercent' => $result->ispercent,
             'label' => $displaylabel,
         ];
+    }
+
+    /**
+     * Honour an optional literal "target" in percent mode: divide the base by a
+     * fixed denominator instead of a report-derived total.
+     *
+     * The target rides in as an ordinary source param but is dropped by the
+     * pipeline allowlist before reaching the source, so it never touches the
+     * query or the cache key. Applying it here — on a clone, so a shared cached
+     * DTO is never mutated — mirrors how {@see chart_director} lets a manual
+     * "target" override the shaping's axis maximum for charts.
+     *
+     * @param chart_data $dto The fetched, shaped data.
+     * @param string $display The display mode.
+     * @param array $sourceparams WS name/value pair list of source parameters.
+     * @return chart_data The DTO to reduce (a clone when a target was applied).
+     */
+    private static function apply_percent_target(chart_data $dto, string $display, array $sourceparams): chart_data {
+        if ($display !== digits_reducer::MODE_PERCENT) {
+            return $dto;
+        }
+        foreach ($sourceparams as $pair) {
+            if ($pair['name'] === 'target' && is_numeric($pair['value']) && (float)$pair['value'] > 0) {
+                $dto = clone $dto;
+                $dto->set_meta('axismax', (float)$pair['value']);
+                break;
+            }
+        }
+        return $dto;
     }
 
     /**

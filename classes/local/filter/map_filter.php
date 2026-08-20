@@ -30,6 +30,12 @@ use renderer_base;
  * the id remap live in data/italy_regions.json — edit the "value" there if your
  * dataset stores the region under a different string.
  *
+ * Note: Trentino-Alto Adige is rendered as its two autonomous provinces,
+ * emitting "TRENTINO" and "ALTO ADIGE" respectively — there is no combined
+ * "TRENTINO-ALTO ADIGE" shape on the map. Geometry is derived from the ISTAT
+ * administrative boundaries (via openpolis/geojson-italy), Mercator-projected
+ * into the 1000x1150 viewBox.
+ *
  * The map can stand alone or share its key with any other filter control —
  * e.g. [chartfilter key=region type=select ...] plus [chartfilter key=region
  * type=map] anywhere else on the page act as one "region" filter, and the

@@ -5,6 +5,14 @@
  * standard palette (wbdashboardpalette_standard) reproduces the plugin's built-in look.
  * See docs/architecture.md and docs/shortcodes.md. */
 
+/* Filter selects must never exceed their container: without a width cap a
+ * select sizes itself to its widest option (e.g. a long course name) and
+ * overflows narrow grid columns. */
+.local-dashboard-filter select {
+    width: 100%;
+    max-width: 100%;
+}
+
 /* Structural, palette-neutral styling for the map filter control. Colours are
  * exposed as CSS custom properties so a palette can override them; the fallbacks
  * keep the control usable on its own. Everything is scoped to the map so it

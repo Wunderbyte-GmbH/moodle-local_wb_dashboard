@@ -61,7 +61,7 @@
         <span id="{{id}}" class="form-control-plaintext local-dashboard-filter-locked">{{value}}</span>
     {{/islocked}}
     {{#isselect}}
-        <select id="{{id}}" class="custom-select" data-filter-control="1">
+        <select id="{{id}}" class="form-select custom-select" data-filter-control="1">
             <option value="">{{#str}}choosedots{{/str}}</option>
             {{#options}}
                 <option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>
@@ -69,7 +69,7 @@
         </select>
     {{/isselect}}
     {{#isgroupedselect}}
-        <select id="{{id}}" class="custom-select" data-filter-control="1">
+        <select id="{{id}}" class="form-select custom-select" data-filter-control="1">
             <option value="">{{#str}}choosedots{{/str}}</option>
             {{#groups}}
                 {{#label}}<optgroup label="{{label}}">{{/label}}
