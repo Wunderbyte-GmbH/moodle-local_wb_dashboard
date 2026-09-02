@@ -35,6 +35,9 @@ use core_reportbuilder\local\helpers\user_filter_manager;
 use core_reportbuilder\local\report\base;
 use core_reportbuilder\manager;
 use core_reportbuilder\permission;
+use core_reportbuilder\table\custom_report_table_view;
+use core_reportbuilder\table\custom_report_table_view_filterset;
+use core_table\local\filter\integer_filter;
 use local_wb_dashboard\local\source\pipeline;
 use local_wb_dashboard\local\source\sources\reportbuilder\reportbuilder_source;
 
@@ -95,5 +98,19 @@ if (!empty($values)) {
     });
 }
 
-$customreport = new \core_reportbuilder\output\custom_report($reportpersistent, false, $download);
-echo $PAGE->get_renderer('core_reportbuilder')->render($customreport);
+// Build the download table directly, the same way core's exporter does in
+// download mode, so the export filename can carry the generation date/time
+// (core names the file after the report alone).
+$filterset = new custom_report_table_view_filterset();
+$filterset->add_filter(new integer_filter('pagesize', null, [$report->get_default_per_page()]));
+
+$table = custom_report_table_view::create($reportid, $download);
+$table->set_filterset($filterset);
+
+// Create() already set report name as filename; re-set it with a timestamp
+// appended (headers are only sent later, during out()). The same string goes
+// into the sheet title so spreadsheet formats carry the date in-file too.
+$exportname = $reportpersistent->get_formatted_name() . '_' . userdate(time(), '%d.%m-%Y./%H.%M', 99, false);
+$table->is_downloading($download, $exportname, $exportname);
+
+echo $PAGE->get_renderer('core_reportbuilder')->render($table);
