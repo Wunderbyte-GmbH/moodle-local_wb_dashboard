@@ -27,6 +27,7 @@ import Ajax from 'core/ajax';
 
 const URL_PREFIX = 'ldf_';
 const DEBOUNCE_MS = 300;
+const ACTIVE_CLASS = 'wb-filter-active';
 
 /**
  * Events dispatched on registered control elements. Exposed on the default
@@ -64,6 +65,23 @@ const ensureUrlLoaded = () => {
             state[key] = {value: value, type: (state[key] && state[key].type) || 'text'};
         }
     });
+};
+
+/**
+ * Mirror whether a control holds a value onto its wrapper, so CSS can
+ * highlight ("glow") filters that are currently set. Called from every path
+ * that writes a control's value: registration, user change, sibling sync
+ * and reset.
+ *
+ * @param {HTMLElement} control
+ */
+const reflectActive = (control) => {
+    const wrapper = control.closest('[data-region="chart-filter"]');
+    if (!wrapper) {
+        return;
+    }
+    const value = control.value === null ? '' : String(control.value);
+    wrapper.classList.toggle(ACTIVE_CLASS, value !== '');
 };
 
 /**
@@ -131,6 +149,7 @@ const syncControls = (key, value, origin) => {
             return;
         }
         control.value = value;
+        reflectActive(control);
         control.dispatchEvent(new CustomEvent(eventTypes.reflect));
     });
 };
@@ -146,6 +165,7 @@ const syncControls = (key, value, origin) => {
  * @param {HTMLElement} origin The control that changed.
  */
 const handleChange = (keys, type, value, origin) => {
+    reflectActive(origin);
     keys.forEach((key) => {
         state[key] = {value: value, type: type};
         syncControls(key, value, origin);
@@ -214,6 +234,7 @@ export default {
             control.value = seed;
             control.dispatchEvent(new CustomEvent(eventTypes.reflect));
         }
+        reflectActive(control);
 
         // Claim every key: the state entry fixes the placeholder type stamped
         // while reading the URL, so fan-out keys keep the control's real type.
@@ -250,6 +271,7 @@ export default {
             (controls[key] || []).forEach((control) => {
                 if (control.value !== '') {
                     control.value = '';
+                    reflectActive(control);
                     control.dispatchEvent(new CustomEvent(eventTypes.reflect));
                 }
             });

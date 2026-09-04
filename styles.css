@@ -66,3 +66,28 @@
     color: inherit;
     font-weight: 600;
 }
+
+/* Glow for filters that currently hold a value. The filter bus toggles
+ * .wb-filter-active on the wrapper (see amd/src/filterbus.js); the colour is a
+ * custom property so a palette can override it. Visible inputs of every filter
+ * type light up: selects, text/number/date inputs, the two date-range boxes and
+ * the region map. */
+.local-dashboard-filter {
+    --wb-filter-glow: rgba(229, 180, 91, 0.85);
+}
+
+.local-dashboard-filter.wb-filter-active .form-control,
+.local-dashboard-filter.wb-filter-active .form-select,
+.local-dashboard-filter.wb-filter-active .custom-select,
+.local-dashboard-filter.wb-filter-active .wb-region-map {
+    box-shadow: 0 0 0 0.15rem var(--wb-filter-glow), 0 0 0.75rem var(--wb-filter-glow);
+    transition: box-shadow 0.2s ease;
+}
+
+.local-dashboard-filter.wb-filter-active .wb-region-map {
+    border-radius: 0.5rem;
+}
+
+.local-dashboard-filter.wb-filter-active .local-dashboard-filter-label {
+    text-shadow: 0 0 0.5rem var(--wb-filter-glow);
+}
