@@ -104,13 +104,17 @@ if (!empty($values)) {
 $filterset = new custom_report_table_view_filterset();
 $filterset->add_filter(new integer_filter('pagesize', null, [$report->get_default_per_page()]));
 
-$table = custom_report_table_view::create($reportid, $download);
+// Deliberately created without the download format: passing it here would make
+// the constructor instantiate the export class, which sends the HTTP headers
+// (and with them the filename) straight away, before we can name the file.
+$table = custom_report_table_view::create($reportid);
 $table->set_filterset($filterset);
 
-// Create() already set report name as filename; re-set it with a timestamp
-// appended (headers are only sent later, during out()). The same string goes
-// into the sheet title so spreadsheet formats carry the date in-file too.
-$exportname = $reportpersistent->get_formatted_name() . '_' . userdate(time(), '%d.%m-%Y./%H.%M', 99, false);
-$table->is_downloading($download, $exportname, $exportname);
+// Now declare the download, with the report name plus a timestamp. This is what
+// creates the export class and sends the headers. The sheet title gets the bare
+// timestamp: spreadsheet formats cap it at 31 characters, so a long report name
+// would push the date out of it.
+$timestamp = userdate(time(), '%d.%m.%Y-%H.%M', 99, false);
+$table->is_downloading($download, $reportpersistent->get_formatted_name() . '_' . $timestamp, $timestamp);
 
 echo $PAGE->get_renderer('core_reportbuilder')->render($table);
