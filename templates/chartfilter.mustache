@@ -36,6 +36,8 @@
     * regions - For map: list of {id, value, name, d, selected}.
     * valuename - For map: display name of the selected region ('' when none).
     * palettename - Active palette name; added as a wb-palette-NAME scope class.
+    * cascadefrom - For select/groupedselect: key of the filter whose value scopes this control's options live ('' = none).
+    * optionsargs - For a cascading select: JSON web-service args to re-fetch the options ('' otherwise).
 
     Example context (json):
     {
@@ -51,11 +53,14 @@
         "istext": false,
         "isnumber": false,
         "options": [],
-        "palettename": "standard"
+        "palettename": "standard",
+        "cascadefrom": "",
+        "optionsargs": ""
     }
 }}
 <div class="local-dashboard-filter form-group wb-palette-{{palettename}}" data-region="chart-filter"
-     data-filter-key="{{key}}" data-filter-keys="{{keys}}" data-filter-type="{{type}}" data-pageid="{{pageid}}">
+     data-filter-key="{{key}}" data-filter-keys="{{keys}}" data-filter-type="{{type}}" data-pageid="{{pageid}}"
+     {{#cascadefrom}}data-cascadefrom="{{cascadefrom}}" data-optionsargs="{{optionsargs}}"{{/cascadefrom}}>
     <label for="{{id}}" class="local-dashboard-filter-label">{{label}}</label>
     {{#islocked}}
         <span id="{{id}}" class="form-control-plaintext local-dashboard-filter-locked">{{value}}</span>
@@ -135,5 +140,10 @@ require(['local_wb_dashboard/daterange'], function(daterange) {
     daterange.init({{#quote}}{{id}}{{/quote}});
 });
 {{/isdaterange}}
+{{#cascadefrom}}
+require(['local_wb_dashboard/cascadeselect'], function(cascadeselect) {
+    cascadeselect.init({{#quote}}{{id}}{{/quote}});
+});
+{{/cascadefrom}}
 {{/js}}
 {{/islocked}}

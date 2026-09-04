@@ -50,6 +50,24 @@ lives in the URL (canonical) with a per-user MUC cache (`page_filter_state`) as 
 persistence fallback; the `filterbus` JS singleton owns it and fans changes out to
 every subscribed chart.
 
+Dynamic select options (`optionsfield`) are resolved by `filter\dynamic_options`
+— one shared path (source resolution, allowlisting, access check, `filteroptions`
+cache) used both by the server-side render and by the
+`local_wb_dashboard_get_filter_options` web service. Options can be scoped by
+constraints, which the source applies natively (Report Builder: `load_rows()`
+with the report's own filters) before scanning distinct values.
+
+**Cascading select** (`cascadefrom=<key>` on a select/groupedselect): the
+`cascadeselect` AMD module subscribes to the bus for the parent key like a
+chart does. On change it calls `get_filter_options` with the parent's current
+value (translated through `pipeline::build_constraints()`, so locked filters
+win), rebuilds the `<option>`s, picks the first one (or keeps the current value
+when still offered) and publishes it via `filterbus.setValue()` — which runs the
+normal change path (sibling sync, URL, persistence, chart reloads). Clearing the
+parent restores the server-rendered options and clears the control. When the
+parent key is locked for the viewer no JS is emitted: the render is already
+scoped server-side.
+
 Constraint contract for sources: `OP_BETWEEN` always carries a two-element
 `[min, max]` value where `0` means "unbounded on that side" (the `daterange`
 control emits `[fromtimestamp, totimestamp]` this way). A source must apply

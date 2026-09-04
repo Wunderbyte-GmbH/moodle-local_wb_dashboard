@@ -104,25 +104,28 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
     }
 
     #[\Override]
-    public function get_filter_options(array $sourceparams, string $field): array {
+    public function get_filter_options(array $sourceparams, string $field, array $constraints = []): array {
         // Preferred: the report's own select filter declares its options. Those
         // values are guaranteed to pass core's select-filter validation.
-        $options = [];
+        $declared = [];
         foreach ($this->report_ids($sourceparams) as $reportid) {
             foreach ($this->declared_filter_options($reportid, $field) as $value => $label) {
-                $options[(string)$value] = format_string((string)$label);
+                $declared[(string)$value] = format_string((string)$label);
             }
         }
 
-        if (empty($options)) {
-            // Fallback (e.g. text filters): distinct formatted values of the
-            // column in the report rows.
+        $options = $declared;
+        if (empty($declared) || !empty($constraints)) {
+            // Declared options are static, so a constrained lookup must scan the
+            // (constrained) rows; also the fallback for text filters.
+            $rowvalues = [];
             foreach ($this->report_ids($sourceparams) as $reportid) {
-                foreach ($this->distinct_column_values($reportid, $field) as $value) {
-                    $options[$value] = $value;
+                foreach ($this->distinct_column_values($reportid, $field, $constraints) as $value) {
+                    $rowvalues[$value] = $value;
                 }
             }
-            \core_collator::asort($options);
+            \core_collator::asort($rowvalues);
+            $options = $this->reconcile_with_declared($rowvalues, $declared);
         }
 
         $result = [];
@@ -130,6 +133,37 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
             $result[] = ['value' => (string)$value, 'label' => (string)$label];
         }
         return $result;
+    }
+
+    /**
+     * Narrow declared select-filter options to those present in scanned rows.
+     *
+     * Declared options keep their keys/labels/order (so values stay valid
+     * constraint values); an entry survives when its key or its label appears
+     * among the row values. Without declared options — or when nothing
+     * matches — the row values are used as they are.
+     *
+     * @param array<string, string> $rowvalues value => value, distinct formatted cell values.
+     * @param array<string, string> $declared value => label, the report filter's declared options.
+     * @return array<string, string> value => label
+     */
+    private function reconcile_with_declared(array $rowvalues, array $declared): array {
+        if (empty($declared) || empty($rowvalues)) {
+            return $rowvalues;
+        }
+        $present = [];
+        foreach ($rowvalues as $value) {
+            $present[\core_text::strtolower((string)$value)] = true;
+        }
+        $matched = [];
+        foreach ($declared as $value => $label) {
+            $byvalue = isset($present[\core_text::strtolower((string)$value)]);
+            $bylabel = isset($present[\core_text::strtolower((string)$label)]);
+            if ($byvalue || $bylabel) {
+                $matched[$value] = $label;
+            }
+        }
+        return empty($matched) ? $rowvalues : $matched;
     }
 
     /**
@@ -170,10 +204,11 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
      *
      * @param int $reportid
      * @param string $field Logical field name.
+     * @param filter_constraint[] $constraints Applied report-natively before scanning.
      * @return string[]
      */
-    private function distinct_column_values(int $reportid, string $field): array {
-        $rows = (new reporthandler($reportid))->return_data();
+    private function distinct_column_values(int $reportid, string $field, array $constraints = []): array {
+        $rows = $this->load_rows($reportid, $constraints);
         if (empty($rows)) {
             return [];
         }
@@ -199,7 +234,8 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
         array $sourceparams,
         string $groupfield,
         string $valuefield,
-        string $scopevalue = ''
+        string $scopevalue = '',
+        array $constraints = []
     ): array {
         $needle = $scopevalue === '' ? '' : \core_text::strtolower(trim($scopevalue));
 
@@ -208,7 +244,7 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
         $groups = [];
         $count = 0;
         foreach ($this->report_ids($sourceparams) as $reportid) {
-            $rows = (new reporthandler($reportid))->return_data();
+            $rows = $this->load_rows($reportid, $constraints);
             if (empty($rows)) {
                 continue;
             }

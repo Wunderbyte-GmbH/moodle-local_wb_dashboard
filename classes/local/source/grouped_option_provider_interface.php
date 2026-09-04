@@ -16,6 +16,8 @@
 
 namespace local_wb_dashboard\local\source;
 
+use local_wb_dashboard\local\dto\filter_constraint;
+
 /**
  * Optional source capability: provide grouped options for a select control.
  *
@@ -45,12 +47,14 @@ interface grouped_option_provider_interface {
      * @param string $groupfield Logical field to group options by (e.g. "region").
      * @param string $valuefield Logical field providing option values (e.g. "asl").
      * @param string $scopevalue When non-empty, return only the group whose label matches.
+     * @param filter_constraint[] $constraints Constraints scoping the data the options come from.
      * @return array<int, array{group: string, options: array<int, array{value: string, label: string}>}>
      */
     public function get_grouped_filter_options(
         array $sourceparams,
         string $groupfield,
         string $valuefield,
-        string $scopevalue = ''
+        string $scopevalue = '',
+        array $constraints = []
     ): array;
 }

@@ -66,6 +66,28 @@ abstract class base_filter implements filter_interface {
         return isset($this->config['default']) ? (string)$this->config['default'] : '';
     }
 
+    /**
+     * The key of the filter this control's options follow live (cascadefrom=…),
+     * or '' when the control is independent. A control cannot cascade from itself.
+     *
+     * @return string
+     */
+    public function get_cascade_key(): string {
+        $key = clean_param(trim((string)($this->config['cascadefrom'] ?? '')), PARAM_ALPHANUMEXT);
+        return $key === $this->key ? '' : $key;
+    }
+
+    /**
+     * Whether this control's options depend on another filter's value — either
+     * live (cascadefrom) or through a locked key (dependson). Only dependent
+     * controls have their server-rendered options scoped by constraints.
+     *
+     * @return bool
+     */
+    protected function is_dependent(): bool {
+        return $this->get_cascade_key() !== '' || trim((string)($this->config['dependson'] ?? '')) !== '';
+    }
+
     #[\Override]
     public function export_for_template(renderer_base $output): array {
         return [

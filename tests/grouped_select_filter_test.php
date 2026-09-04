@@ -170,4 +170,31 @@ final class grouped_select_filter_test extends \advanced_testcase {
 
         $this->assertSame(['North', 'South'], array_keys($this->as_map($groups)));
     }
+
+    public function test_locked_dependency_scopes_dynamic_groups_through_the_report_filter(): void {
+        $this->resetAfterTest();
+        $this->getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text', 'shortname' => 'fname', 'name' => 'First name lock',
+        ]);
+        set_config('lockedfilters', 'firstname=fname', 'local_wb_dashboard');
+        $reportid = $this->build_names_report();
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $rbgenerator->create_filter(['reportid' => $reportid, 'uniqueidentifier' => 'user:firstname']);
+        $rbgenerator->create_audience(['reportid' => $reportid, 'configdata' => []]);
+
+        // A viewer locked to firstname "Ann" (no ignorelockedfilters capability).
+        $this->setUser($this->getDataGenerator()->create_user(['profile_field_fname' => 'Ann']));
+
+        $groups = $this->export_groups([
+            'report' => (string)$reportid,
+            'optionsfield' => 'lastname',
+            'groupfield' => 'firstname',
+            'cascadefrom' => 'firstname',
+        ]);
+
+        // Only Ann's group survives (flat), scoped via the report's own filter.
+        $this->assertCount(1, $groups);
+        $this->assertEqualsCanonicalizing(['Alpha', 'Beta'], $this->as_map($groups)['']);
+    }
 }

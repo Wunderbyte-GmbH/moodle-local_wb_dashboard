@@ -16,6 +16,8 @@
 
 namespace local_wb_dashboard\local\source;
 
+use local_wb_dashboard\local\dto\filter_constraint;
+
 /**
  * Optional source capability: provide the options for a select filter control.
  *
@@ -35,9 +37,14 @@ interface option_provider_interface {
      * Values must be usable as constraint values for the same logical key, so
      * that selecting an option actually filters the source's data.
      *
+     * When constraints are given, only values present in the data matching them
+     * are returned — this is how a cascading select scopes its options to the
+     * current value of another filter. Empty constraints = every value.
+     *
      * @param array $sourceparams Already allowlisted source params.
      * @param string $field Logical field/filter name to derive options from.
+     * @param filter_constraint[] $constraints Constraints scoping the data the options come from.
      * @return array<int, array{value: string, label: string}>
      */
-    public function get_filter_options(array $sourceparams, string $field): array;
+    public function get_filter_options(array $sourceparams, string $field, array $constraints = []): array;
 }

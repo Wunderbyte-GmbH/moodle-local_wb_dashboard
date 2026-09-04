@@ -255,6 +255,42 @@ final class locked_filters_test extends \advanced_testcase {
         $this->assertStringContainsString('<select', $html);
     }
 
+    public function test_chartfilter_shortcode_emits_cascade_only_when_parent_is_free(): void {
+        $this->resetAfterTest();
+        $this->create_region_field();
+        set_config('lockedfilters', 'region=region', 'local_wb_dashboard');
+        $this->setAdminUser();
+        $reportid = $this->create_users_report();
+
+        $args = [
+            'key' => 'name', 'type' => 'select', 'label' => 'Name',
+            'report' => (string)$reportid, 'optionsfield' => 'firstname', 'cascadefrom' => 'region',
+        ];
+        $env = (object)['context' => \context_system::instance()];
+        $next = static fn(): string => '';
+
+        // Exempt user: region is free, so the select cascades from it (the data
+        // attributes are what the cascadeselect module boots from; the {{#js}}
+        // block itself goes to $PAGE->requires, not into the returned HTML).
+        $html = shortcodes::chartfilter('chartfilter', $args, null, $env, $next);
+        $this->assertStringContainsString('data-cascadefrom="region"', $html);
+        $this->assertStringContainsString('data-optionsargs=', $html);
+        $this->assertStringContainsString('&quot;field&quot;:&quot;firstname&quot;', $html);
+
+        // Locked user: region never changes on the client, so no cascade.
+        $this->setUser($this->getDataGenerator()->create_user(['profile_field_region' => 'south']));
+        $html = shortcodes::chartfilter('chartfilter', $args, null, $env, $next);
+        $this->assertStringContainsString('<select', $html);
+        $this->assertStringNotContainsString('data-cascadefrom', $html);
+        $this->assertStringNotContainsString('data-optionsargs', $html);
+
+        // Static options: nothing to re-fetch, so no cascade either.
+        $this->setAdminUser();
+        $static = ['key' => 'name', 'type' => 'select', 'options' => 'a:A,b:B', 'cascadefrom' => 'region'];
+        $html = shortcodes::chartfilter('chartfilter', $static, null, $env, $next);
+        $this->assertStringNotContainsString('data-cascadefrom', $html);
+    }
+
     public function test_pipeline_leaves_exempt_users_untouched(): void {
         $this->resetAfterTest();
         $this->create_region_field();

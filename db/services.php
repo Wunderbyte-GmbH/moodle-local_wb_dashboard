@@ -43,6 +43,12 @@ $functions = [
         'type'        => 'read',
         'ajax'        => true,
     ],
+    'local_wb_dashboard_get_filter_options' => [
+        'classname'   => 'local_wb_dashboard\external\get_filter_options',
+        'description' => 'Return the dynamic options of a select filter, scoped by the current page filter values.',
+        'type'        => 'read',
+        'ajax'        => true,
+    ],
     'local_wb_dashboard_set_filter_state' => [
         'classname'   => 'local_wb_dashboard\external\set_filter_state',
         'description' => 'Persist the per-user page filter state.',

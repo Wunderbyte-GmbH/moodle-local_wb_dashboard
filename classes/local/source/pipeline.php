@@ -46,15 +46,7 @@ class pipeline {
     public static function fetch(string $sourcename, array $sourceparams, array $filtervalues): chart_data {
         // Resolve the source (throws on unknown).
         $source = source_registry::get($sourcename);
-
-        // Allowlist source params against what the source declares it needs.
-        $allowed = array_flip($source->required_params());
-        $cleanparams = [];
-        foreach ($sourceparams as $pair) {
-            if (isset($allowed[$pair['name']])) {
-                $cleanparams[$pair['name']] = $pair['value'];
-            }
-        }
+        $cleanparams = self::allowlist_params($source, $sourceparams);
 
         // Real object-level authorization lives in the source.
         $source->require_access($cleanparams);
@@ -80,6 +72,25 @@ class pipeline {
         $data = $source->fetch($cleanparams, $constraints);
         $cache->set($cachekey, $data);
         return $data;
+    }
+
+    /**
+     * Allowlist WS name/value source params against what the source declares
+     * it needs; anything else is dropped.
+     *
+     * @param source_interface $source The resolved source.
+     * @param array $sourceparams WS list of {name, value} pairs.
+     * @return array name => value
+     */
+    public static function allowlist_params(source_interface $source, array $sourceparams): array {
+        $allowed = array_flip($source->required_params());
+        $cleanparams = [];
+        foreach ($sourceparams as $pair) {
+            if (isset($allowed[$pair['name']])) {
+                $cleanparams[$pair['name']] = $pair['value'];
+            }
+        }
+        return $cleanparams;
     }
 
     /**

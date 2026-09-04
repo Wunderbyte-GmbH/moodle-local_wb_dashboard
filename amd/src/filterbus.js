@@ -284,6 +284,34 @@ export default {
     },
 
     /**
+     * Programmatically set a registered control's value and publish it exactly
+     * like a user change (sibling sync, URL, persistence, chart reloads) —
+     * immediately, not debounced. Used by dependent controls (cascadeselect)
+     * that pick a value on the user's behalf. The control's own change
+     * listener does not fire, so this cannot loop back into the bus.
+     *
+     * @param {String} controlId
+     * @param {String} value
+     */
+    setValue: (controlId, value) => {
+        const control = document.getElementById(controlId);
+        if (!control) {
+            return;
+        }
+        const wrapper = control.closest('[data-region="chart-filter"]');
+        if (!wrapper) {
+            return;
+        }
+        const keys = (wrapper.dataset.filterKeys || wrapper.dataset.filterKey || '')
+            .split(',').filter(Boolean);
+        if (!keys.length) {
+            return;
+        }
+        control.value = value;
+        handleChange(keys, wrapper.dataset.filterType, value, control);
+    },
+
+    /**
      * Return the current {key, type, value} triples for the given keys
      * ([] = all), skipping empty values.
      *

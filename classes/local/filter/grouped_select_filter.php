@@ -18,7 +18,6 @@ namespace local_wb_dashboard\local\filter;
 
 use local_wb_dashboard\local\dto\filter_constraint;
 use local_wb_dashboard\local\source\grouped_option_provider_interface;
-use local_wb_dashboard\local\source\source_registry;
 use renderer_base;
 
 /**
@@ -37,11 +36,17 @@ use renderer_base;
  * unscoped admin sees every region's ASLs grouped. A single resulting group is
  * rendered flat (no optgroup wrapper).
  *
+ * With cascadefrom="region" the control additionally follows the region filter
+ * live on the client (see {@see select_filter}).
+ *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class grouped_select_filter extends base_filter {
+    /** @var array|null|false Resolved dynamic source; false until first resolved. */
+    private $resolved = false;
+
     #[\Override]
     public function get_type(): string {
         return 'groupedselect';
@@ -72,6 +77,13 @@ class grouped_select_filter extends base_filter {
         }
 
         $context['groups'] = $groups;
+
+        // What the client needs to re-fetch the options ('' = static only).
+        $resolved = $this->dynamic_source();
+        $context['optionsargs'] = $resolved === null
+            ? ''
+            : json_encode(dynamic_options::wsargs($resolved, $this->value_field(), $this->group_field()));
+        $context['cascadefrom'] = $this->get_cascade_key();
         return $context;
     }
 
@@ -86,18 +98,67 @@ class grouped_select_filter extends base_filter {
     }
 
     /**
+     * The configured option value field ('' = static groups only).
+     *
+     * @return string
+     */
+    private function value_field(): string {
+        return trim((string)($this->config['optionsfield'] ?? ''));
+    }
+
+    /**
+     * The configured group field ('' = static groups only).
+     *
+     * @return string
+     */
+    private function group_field(): string {
+        return trim((string)($this->config['groupfield'] ?? ''));
+    }
+
+    /**
+     * Resolve (once) the grouped dynamic source, null when there is none usable.
+     *
+     * @return array|null
+     */
+    private function dynamic_source(): ?array {
+        if ($this->resolved === false) {
+            $this->resolved = ($this->value_field() === '' || $this->group_field() === '')
+                ? null
+                : dynamic_options::resolve_source($this->config, grouped_option_provider_interface::class);
+        }
+        return $this->resolved;
+    }
+
+    /**
      * The grouped option list: dynamic (optionsfield + groupfield) with static
      * fallback, scoped to a single group when the dependson key is locked.
      *
      * @return array<int, array{group: string, options: array<int, array{value: string, label: string}>}>
      */
     private function resolve_groups(): array {
-        $valuefield = trim((string)($this->config['optionsfield'] ?? ''));
-        $groupfield = trim((string)($this->config['groupfield'] ?? ''));
-
         $groups = [];
-        if ($valuefield !== '' && $groupfield !== '') {
-            $groups = $this->fetch_dynamic_groups($groupfield, $valuefield);
+        $resolved = $this->dynamic_source();
+        if ($resolved !== null) {
+            $constraints = [];
+            if ($this->is_dependent()) {
+                $constraints = dynamic_options::render_constraints($resolved['source'], $resolved['params']);
+                if ($constraints === null) {
+                    return [];
+                }
+            }
+            $groups = dynamic_options::groups(
+                $resolved['name'],
+                $resolved['source'],
+                $resolved['params'],
+                $this->group_field(),
+                $this->value_field(),
+                $this->scope_value(),
+                $constraints
+            );
+            if (empty($groups) && !empty($constraints)) {
+                // Scoped and empty: an unscoped static list would be wrong.
+                return [];
+            }
         }
         if (empty($groups)) {
             $groups = $this->parse_static_groups();
@@ -127,47 +188,6 @@ class grouped_select_filter extends base_filter {
             return '';
         }
         return (string)(locked_filters::for_current_user()[$dependson] ?? '');
-    }
-
-    /**
-     * Fetch (cached) grouped options from the configured source, degrading to []
-     * when the source is unknown, is not a grouped provider, or denies access.
-     *
-     * @param string $groupfield
-     * @param string $valuefield
-     * @return array<int, array{group: string, options: array<int, array{value: string, label: string}>}>
-     */
-    private function fetch_dynamic_groups(string $groupfield, string $valuefield): array {
-        $sourcename = trim((string)($this->config['source'] ?? 'reportbuilder'));
-        if (!source_registry::exists($sourcename)) {
-            return [];
-        }
-        $source = source_registry::get($sourcename);
-        if (!$source instanceof grouped_option_provider_interface) {
-            return [];
-        }
-
-        $sourceparams = array_intersect_key($this->config, array_flip($source->required_params()));
-        try {
-            // Per-user authorization always runs before the shared cache is read.
-            $source->require_access($sourceparams);
-        } catch (\Throwable $e) {
-            return [];
-        }
-
-        $scopevalue = $this->scope_value();
-        $cache = \cache::make('local_wb_dashboard', 'filteroptions');
-        // The scope value is part of the key so viewers locked to different
-        // groups never share a cache entry.
-        $cachekey = sha1(implode('|', [
-            'grouped', $sourcename, $groupfield, $valuefield, $scopevalue, json_encode($sourceparams),
-        ]));
-        $groups = $cache->get($cachekey);
-        if ($groups === false) {
-            $groups = $source->get_grouped_filter_options($sourceparams, $groupfield, $valuefield, $scopevalue);
-            $cache->set($cachekey, $groups);
-        }
-        return $groups;
     }
 
     /**

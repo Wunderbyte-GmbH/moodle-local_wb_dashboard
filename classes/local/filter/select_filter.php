@@ -18,7 +18,6 @@ namespace local_wb_dashboard\local\filter;
 
 use local_wb_dashboard\local\dto\filter_constraint;
 use local_wb_dashboard\local\source\option_provider_interface;
-use local_wb_dashboard\local\source\source_registry;
 use renderer_base;
 
 /**
@@ -30,11 +29,20 @@ use renderer_base;
  * defaulting to reportbuilder). Static options act as the fallback whenever the
  * dynamic lookup yields nothing (unknown source, no permission, empty data).
  *
+ * With cascadefrom="<key>" the control follows another filter live: the client
+ * re-fetches the dynamic options scoped by that filter's current value (see
+ * the cascadeselect AMD module and the get_filter_options web service) and
+ * auto-selects the first one. Server-side, a dependent control's options are
+ * scoped by the viewer's locked filters only.
+ *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class select_filter extends base_filter {
+    /** @var array|null|false Resolved dynamic source; false until first resolved. */
+    private $resolved = false;
+
     #[\Override]
     public function get_type(): string {
         return 'select';
@@ -51,6 +59,13 @@ class select_filter extends base_filter {
                 'selected' => ((string)$opt['value'] === $default),
             ];
         }, $this->resolve_options());
+
+        // What the client needs to re-fetch the options ('' = static only).
+        $resolved = $this->dynamic_source();
+        $context['optionsargs'] = $resolved === null
+            ? ''
+            : json_encode(dynamic_options::wsargs($resolved, $this->options_field()));
+        $context['cascadefrom'] = $this->get_cascade_key();
         return $context;
     }
 
@@ -65,54 +80,60 @@ class select_filter extends base_filter {
     }
 
     /**
+     * The configured dynamic options field ('' = static options only).
+     *
+     * @return string
+     */
+    private function options_field(): string {
+        return trim((string)($this->config['optionsfield'] ?? ''));
+    }
+
+    /**
+     * Resolve (once) the dynamic source behind optionsfield, null when there is
+     * none usable.
+     *
+     * @return array|null
+     */
+    private function dynamic_source(): ?array {
+        if ($this->resolved === false) {
+            $this->resolved = $this->options_field() === ''
+                ? null
+                : dynamic_options::resolve_source($this->config, option_provider_interface::class);
+        }
+        return $this->resolved;
+    }
+
+    /**
      * The option list: dynamic (optionsfield config) with static fallback.
+     *
+     * A dependent control (cascadefrom / dependson) has its dynamic options
+     * scoped by the viewer's locked filters; when that scope yields nothing the
+     * static list is NOT shown, since it would be unscoped.
      *
      * @return array<int, array{value: string, label: string}>
      */
     private function resolve_options(): array {
-        $field = trim((string)($this->config['optionsfield'] ?? ''));
-        if ($field !== '') {
-            $options = $this->fetch_dynamic_options($field);
-            if (!empty($options)) {
+        $resolved = $this->dynamic_source();
+        if ($resolved !== null) {
+            $constraints = [];
+            if ($this->is_dependent()) {
+                $constraints = dynamic_options::render_constraints($resolved['source'], $resolved['params']);
+                if ($constraints === null) {
+                    return [];
+                }
+            }
+            $options = dynamic_options::options(
+                $resolved['name'],
+                $resolved['source'],
+                $resolved['params'],
+                $this->options_field(),
+                $constraints
+            );
+            if (!empty($options) || !empty($constraints)) {
                 return $options;
             }
         }
         return $this->parse_options();
-    }
-
-    /**
-     * Fetch (cached) options from the configured source, degrading to [] when
-     * the source is unknown, provides no options, or denies access.
-     *
-     * @param string $field Logical field/filter name to derive options from.
-     * @return array<int, array{value: string, label: string}>
-     */
-    private function fetch_dynamic_options(string $field): array {
-        $sourcename = trim((string)($this->config['source'] ?? 'reportbuilder'));
-        if (!source_registry::exists($sourcename)) {
-            return [];
-        }
-        $source = source_registry::get($sourcename);
-        if (!$source instanceof option_provider_interface) {
-            return [];
-        }
-
-        $sourceparams = array_intersect_key($this->config, array_flip($source->required_params()));
-        try {
-            // Per-user authorization always runs before the shared cache is read.
-            $source->require_access($sourceparams);
-        } catch (\Throwable $e) {
-            return [];
-        }
-
-        $cache = \cache::make('local_wb_dashboard', 'filteroptions');
-        $cachekey = sha1($sourcename . '|' . $field . '|' . json_encode($sourceparams));
-        $options = $cache->get($cachekey);
-        if ($options === false) {
-            $options = $source->get_filter_options($sourceparams, $field);
-            $cache->set($cachekey, $options);
-        }
-        return $options;
     }
 
     /**

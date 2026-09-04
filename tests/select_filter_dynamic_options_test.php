@@ -18,7 +18,10 @@ namespace local_wb_dashboard;
 
 use core_reportbuilder\generator;
 use core_user\reportbuilder\datasource\users;
+use local_wb_dashboard\local\dto\filter_constraint;
+use local_wb_dashboard\local\filter\dynamic_options;
 use local_wb_dashboard\local\filter\filter_factory;
+use local_wb_dashboard\local\source\sources\reportbuilder\reportbuilder_source;
 
 /**
  * Tests for dynamic select-filter options (optionsfield config).
@@ -120,5 +123,115 @@ final class select_filter_dynamic_options_test extends \advanced_testcase {
         $options = $this->export_options(['options' => 'one:One,two:Two']);
 
         $this->assertSame(['one' => 'One', 'two' => 'Two'], $options);
+    }
+
+    /**
+     * A users report with firstname + lastname columns and a firstname filter;
+     * Ann owns two lastnames, Bob one.
+     *
+     * @return int Report id.
+     */
+    private function build_names_report(): int {
+        $this->getDataGenerator()->create_user(['firstname' => 'Ann', 'lastname' => 'Alpha']);
+        $this->getDataGenerator()->create_user(['firstname' => 'Ann', 'lastname' => 'Beta']);
+        $this->getDataGenerator()->create_user(['firstname' => 'Bob', 'lastname' => 'Gamma']);
+
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $rbgenerator->create_report(['name' => 'Names', 'source' => users::class, 'default' => 0]);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:firstname']);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:lastname']);
+        $rbgenerator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:firstname']);
+        return (int)$report->get('id');
+    }
+
+    public function test_source_constraints_scope_options_to_matching_rows(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $reportid = $this->build_names_report();
+        $source = new reportbuilder_source();
+        $values = static fn(array $options): array => array_map(static fn(array $o): string => $o['value'], $options);
+
+        // Unscoped: every lastname (site users such as admin included).
+        $all = $source->get_filter_options(['report' => (string)$reportid], 'lastname');
+        $this->assertSame([], array_diff(['Alpha', 'Beta', 'Gamma'], $values($all)));
+
+        $ann = $source->get_filter_options(['report' => (string)$reportid], 'lastname', [
+            new filter_constraint('firstname', filter_constraint::OP_EQUAL, 'Ann'),
+        ]);
+        $this->assertEqualsCanonicalizing(['Alpha', 'Beta'], $values($ann));
+    }
+
+    public function test_source_constraints_narrow_declared_select_options(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->getDataGenerator()->create_user(['firstname' => 'Ann', 'country' => 'AT']);
+        $this->getDataGenerator()->create_user(['firstname' => 'Bob', 'country' => 'DE']);
+
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $rbgenerator->create_report(['name' => 'Users', 'source' => users::class, 'default' => 0]);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:country']);
+        $rbgenerator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:country']);
+        $rbgenerator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:firstname']);
+
+        $options = (new reportbuilder_source())->get_filter_options(['report' => (string)$report->get('id')], 'country', [
+            new filter_constraint('firstname', filter_constraint::OP_EQUAL, 'Ann'),
+        ]);
+
+        // Only Ann's country survives, still keyed by the declared option code
+        // (the cell shows the country name) so it remains a valid filter value.
+        $this->assertCount(1, $options);
+        $this->assertSame('AT', $options[0]['value']);
+        $this->assertSame(get_string('AT', 'countries'), $options[0]['label']);
+    }
+
+    public function test_constrained_and_unconstrained_options_are_cached_separately(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $reportid = $this->build_names_report();
+        $values = static fn(array $options): array => array_map(static fn(array $o): string => $o['value'], $options);
+
+        $resolved = dynamic_options::resolve_source(['report' => (string)$reportid]);
+        $this->assertNotNull($resolved);
+        [$name, $source, $params] = [$resolved['name'], $resolved['source'], $resolved['params']];
+        $ann = [new filter_constraint('firstname', filter_constraint::OP_EQUAL, 'Ann')];
+
+        $all = dynamic_options::options($name, $source, $params, 'lastname');
+        $annonly = dynamic_options::options($name, $source, $params, 'lastname', $ann);
+        $allagain = dynamic_options::options($name, $source, $params, 'lastname');
+        $annagain = dynamic_options::options($name, $source, $params, 'lastname', $ann);
+
+        $this->assertSame([], array_diff(['Alpha', 'Beta', 'Gamma'], $values($all)));
+        $this->assertEqualsCanonicalizing(['Alpha', 'Beta'], $values($annonly));
+        $this->assertSame($all, $allagain);
+        $this->assertSame($annonly, $annagain);
+    }
+
+    public function test_cascading_select_exports_wsargs_and_parent_key(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        global $PAGE;
+        $reportid = $this->build_names_report();
+
+        $filter = filter_factory::create('select', 'lastname', [
+            'report' => (string)$reportid,
+            'optionsfield' => 'lastname',
+            'cascadefrom' => 'firstname',
+        ]);
+        $context = $filter->export_for_template($PAGE->get_renderer('core'));
+
+        $this->assertSame('firstname', $context['cascadefrom']);
+        $wsargs = json_decode($context['optionsargs'], true);
+        $this->assertSame('reportbuilder', $wsargs['source']);
+        $this->assertSame('lastname', $wsargs['field']);
+        $this->assertSame('', $wsargs['groupfield']);
+        $this->assertSame([['name' => 'report', 'value' => (string)$reportid]], $wsargs['sourceparams']);
+
+        // A static-only select has nothing to re-fetch, and cannot cascade from itself.
+        $static = filter_factory::create('select', 'x', ['options' => 'a:A', 'cascadefrom' => 'x']);
+        $context = $static->export_for_template($PAGE->get_renderer('core'));
+        $this->assertSame('', $context['optionsargs']);
+        $this->assertSame('', $context['cascadefrom']);
     }
 }
