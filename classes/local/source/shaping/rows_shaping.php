@@ -19,6 +19,7 @@ namespace local_wb_dashboard\local\source\shaping;
 use local_wb_dashboard\local\dto\chart_data;
 use local_wb_dashboard\local\dto\chart_series;
 use local_wb_dashboard\local\dto\filter_constraint;
+use local_wb_dashboard\local\source\aggregating_source;
 use local_wb_dashboard\local\source\shapable_source;
 use moodle_exception;
 
@@ -100,7 +101,12 @@ class rows_shaping implements shaping_strategy {
         // Optional 100%-stack: scale each category's stack to percentages.
         $percent = strtolower((string)($params['normalize'] ?? '')) === 'percent';
 
-        $rows = $source->load_rows($datasetid, $constraints);
+        // Everything below sums the value fields per category, so the rows can
+        // just as well arrive pre-summed from the database — see load_rows().
+        $rows = $this->load_rows($source, $datasetid, $constraints, [
+            'group' => [$categoryfield, $stackfield, (string)($params['idfield'] ?? '')],
+            'sum' => $iscount ? [] : array_merge($valuefields, [$remainderof]),
+        ]);
         if (empty($rows)) {
             throw new moodle_exception('error:noreportdata', 'local_wb_dashboard');
         }
@@ -187,6 +193,43 @@ class rows_shaping implements shaping_strategy {
         }
 
         return $this->normalize_percent($this->apply_topn($data, $top, $order), $percent);
+    }
+
+    /**
+     * Load the rows to shape, letting the source pre-group them where it can.
+     *
+     * Shaping a category chart reads a fixed handful of fields per row and sums
+     * them per category, so it does not care whether a row stands for one
+     * dataset record or a thousand of them — summing is associative. A source
+     * implementing {@see aggregating_source} can therefore do the bulk of the
+     * work in the database and hand back one row per group, turning a scan of
+     * every dataset row into a scan of roughly one row per bar.
+     *
+     * Two cases keep the ungrouped path. Counting rows (aggregation=count)
+     * cannot survive grouping, because a grouped row no longer says how many
+     * records it covers. And a source that cannot group a particular dataset
+     * safely returns null, which is a normal outcome rather than a failure.
+     *
+     * @param shapable_source $source
+     * @param int $datasetid
+     * @param filter_constraint[] $constraints
+     * @param array $fields ['group' => string[], 'sum' => string[]] logical field names,
+     *                      empty entries allowed (they are dropped).
+     * @return array Rows to shape.
+     */
+    private function load_rows(shapable_source $source, int $datasetid, array $constraints, array $fields): array {
+        $names = static fn(array $list): array =>
+            array_values(array_unique(array_filter(array_map('trim', $list), static fn(string $f): bool => $f !== '')));
+
+        $sumfields = $names($fields['sum']);
+        if ($sumfields && $source instanceof aggregating_source) {
+            $grouped = $source->load_grouped_rows($datasetid, $constraints, $names($fields['group']), $sumfields);
+            if ($grouped !== null) {
+                return $grouped;
+            }
+        }
+
+        return $source->load_rows($datasetid, $constraints);
     }
 
     /**

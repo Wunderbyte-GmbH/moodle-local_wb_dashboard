@@ -24,6 +24,7 @@ use core_reportbuilder\manager;
 use core_reportbuilder\permission;
 use local_wb_dashboard\local\dto\chart_data;
 use local_wb_dashboard\local\dto\filter_constraint;
+use local_wb_dashboard\local\source\aggregating_source;
 use local_wb_dashboard\local\source\grouped_option_provider_interface;
 use local_wb_dashboard\local\source\option_provider_interface;
 use local_wb_dashboard\local\source\shapable_source;
@@ -46,7 +47,8 @@ use local_wb_dashboard\local\source\shaping\shaper;
  * @copyright  2026 Wunderbyte GmbH
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class reportbuilder_source implements grouped_option_provider_interface, option_provider_interface, shapable_source {
+class reportbuilder_source implements aggregating_source, grouped_option_provider_interface, option_provider_interface,
+        shapable_source {
     /** @var int Cap for options derived by scanning report rows. */
     private const MAX_DYNAMIC_OPTIONS = 500;
 
@@ -319,22 +321,90 @@ class reportbuilder_source implements grouped_option_provider_interface, option_
      */
     #[\Override]
     public function load_rows(int|string $datasetid, array $constraints): array {
-        $reportid = (int)$datasetid;
+        return $this->with_constraints((int)$datasetid, $constraints,
+            static fn(reporthandler $handler): array => $handler->return_data());
+    }
+
+    /**
+     * Run a callback against a report with the recognized constraints applied
+     * as report-native filter values, restoring the user's prior filter state
+     * afterwards.
+     *
+     * @param int $reportid
+     * @param filter_constraint[] $constraints
+     * @param callable $query Receives the report handler, returns the rows.
+     * @return array|null Whatever $query returned.
+     */
+    private function with_constraints(int $reportid, array $constraints, callable $query): ?array {
         $report = manager::get_report_from_id($reportid);
         $filtervalues = $this->build_filter_values($report, $constraints);
+        $handler = new reporthandler($reportid);
 
         if (empty($filtervalues)) {
-            return (new reporthandler($reportid))->return_data();
+            return $query($handler);
         }
 
         // Apply our values on top of the user's current ones, query, then restore.
         $previous = $report->get_filter_values();
         try {
             $report->set_filter_values(array_merge($previous, $filtervalues));
-            return (new reporthandler($reportid))->return_data();
+            return $query($handler);
         } finally {
             $report->set_filter_values($previous);
         }
+    }
+
+    /**
+     * Load the report's rows pre-grouped by the database.
+     *
+     * Same contract as {@see load_rows()} — same filters, same row keys — but
+     * one row per group instead of one per report row. Field names have to be
+     * resolved before any row exists, so they are matched against a synthetic
+     * row of the report's column aliases; anything that does not resolve to a
+     * real column aborts the push-down.
+     *
+     * @param int|string $datasetid Report id.
+     * @param filter_constraint[] $constraints
+     * @param string[] $groupfields
+     * @param string[] $sumfields
+     * @return array|null Grouped rows, or null when the report cannot be grouped.
+     */
+    #[\Override]
+    public function load_grouped_rows(
+        int|string $datasetid,
+        array $constraints,
+        array $groupfields,
+        array $sumfields
+    ): ?array {
+        $reportid = (int)$datasetid;
+
+        // resolve_field_name() matches a field against the columns present in a
+        // sample row, so give it one keyed by every alias the report can emit.
+        $samplerow = array_fill_keys(
+            array_keys(manager::get_report_from_id($reportid)->get_active_columns_by_alias()),
+            null
+        );
+
+        // Resolve every logical name to a column alias; an unresolved name comes
+        // back unchanged and is rejected by return_grouped_data().
+        $aliases = function (array $fields) use ($reportid, $samplerow): array {
+            $resolved = [];
+            foreach ($fields as $field) {
+                $resolved[] = reporthandler::resolve_field_name($reportid, $field, $samplerow);
+            }
+            return array_values(array_unique($resolved));
+        };
+        $groupaliases = $aliases($groupfields);
+        $sumaliases = $aliases($sumfields);
+
+        // A field asked to be both grouped and summed is contradictory; the
+        // ungrouped path handles it the way it always has.
+        if (array_intersect($groupaliases, $sumaliases)) {
+            return null;
+        }
+
+        return $this->with_constraints($reportid, $constraints,
+            static fn(reporthandler $handler): ?array => $handler->return_grouped_data($groupaliases, $sumaliases));
     }
 
     /**

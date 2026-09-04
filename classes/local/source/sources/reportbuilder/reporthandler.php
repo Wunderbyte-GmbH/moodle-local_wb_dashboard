@@ -16,6 +16,8 @@
 
 namespace local_wb_dashboard\local\source\sources\reportbuilder;
 
+use core_reportbuilder\local\aggregation\count as countaggregation;
+use core_reportbuilder\local\aggregation\sum;
 use core_reportbuilder\manager;
 use core_reportbuilder\table\custom_report_table_view;
 
@@ -63,6 +65,99 @@ class reporthandler {
             $table->close_recordset();
         }
         return $this->reportrows;
+    }
+
+    /**
+     * Return the report's rows grouped in the database instead of row by row.
+     *
+     * Report Builder already knows how to group: as soon as any active column
+     * carries an aggregation, {@see \core_reportbuilder\table\custom_report_table}
+     * groups by every column that does not. So grouping is a matter of setting
+     * the right aggregation on each column before the table builds its SQL —
+     * "sum" on the columns whose values are wanted, "count" on the ones nobody
+     * reads (count is the only aggregation compatible with every column type,
+     * and it takes them out of the GROUP BY), and none on the columns to group
+     * by. The aggregations are restored afterwards, since the report instance is
+     * cached for the rest of the request.
+     *
+     * Returns null when the report cannot be grouped safely, in which case the
+     * caller should fall back to the ungrouped {@see self::return_data()}:
+     *
+     * - a column already carries an aggregation, or the report is set to show
+     *   unique rows: the report author asked for a specific row semantics and
+     *   ours would silently replace it;
+     * - a wanted alias does not belong to any active column, or its column type
+     *   cannot be summed.
+     *
+     * The report's own sorting is preserved by keeping every sorted column
+     * grouped as well: an aggregated column would otherwise be ordered by its
+     * aggregate (a row count) instead of its value, silently reshuffling the
+     * chart. That can make the grouping finer than asked for — a report sorted
+     * by a per-row column yields a group per distinct value of it — which stays
+     * correct, since the caller finishes the summing itself.
+     *
+     * @param string[] $groupaliases Column aliases to group by.
+     * @param string[] $sumaliases Column aliases to sum.
+     * @return array|null Grouped rows keyed like return_data(), or null to fall back.
+     */
+    public function return_grouped_data(array $groupaliases, array $sumaliases): ?array {
+        $report = manager::get_report_from_id($this->reportid);
+        if ($report->get_report_persistent()->get('uniquerows')) {
+            return null;
+        }
+
+        $columns = $report->get_active_columns_by_alias();
+        if (empty($columns) || empty($sumaliases)) {
+            return null;
+        }
+        foreach (array_merge($groupaliases, $sumaliases) as $alias) {
+            if (!array_key_exists($alias, $columns)) {
+                return null;
+            }
+        }
+
+        // Columns the report sorts by have to keep their own value to sort on.
+        foreach ($columns as $alias => $column) {
+            if (
+                !in_array($alias, $sumaliases, true)
+                && $column->get_is_sortable()
+                && $column->get_persistent()->get('sortenabled')
+            ) {
+                $groupaliases[] = $alias;
+            }
+        }
+
+        // Decide each column's aggregation up front, so an incompatible column
+        // aborts before anything has been changed.
+        $wanted = [];
+        foreach ($columns as $alias => $column) {
+            if ($column->get_aggregation() !== null) {
+                return null;
+            }
+            if (in_array($alias, $groupaliases, true)) {
+                $wanted[$alias] = null;
+            } else if (in_array($alias, $sumaliases, true)) {
+                if (!sum::compatible($column->get_type())) {
+                    return null;
+                }
+                $wanted[$alias] = sum::get_class_name();
+            } else {
+                $wanted[$alias] = countaggregation::get_class_name();
+            }
+        }
+
+        try {
+            foreach ($wanted as $alias => $aggregation) {
+                $columns[$alias]->set_aggregation($aggregation);
+            }
+            $this->reportrows = null;
+            return $this->return_data();
+        } finally {
+            foreach (array_keys($wanted) as $alias) {
+                $columns[$alias]->set_aggregation(null);
+            }
+            $this->reportrows = null;
+        }
     }
 
     /**
