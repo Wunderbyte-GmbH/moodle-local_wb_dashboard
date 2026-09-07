@@ -24,30 +24,40 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+// The read functions declare 'readonlysession': they only read the database and
+// application-mode caches, so they can run without the session write lock. A page
+// fires one request per chart, digits field and cascading filter at once; without
+// this every one of them queues behind the slowest report query on the lock, and
+// whichever waits past the session lock acquire timeout fails with a session
+// error. Takes effect only when $CFG->enable_read_only_sessions is set on the site.
 $functions = [
     'local_wb_dashboard_get_chart_data' => [
         'classname'   => 'local_wb_dashboard\external\get_chart_data',
         'description' => 'Return the fully-built chart configuration for a chart definition.',
         'type'        => 'read',
         'ajax'        => true,
+        'readonlysession' => true,
     ],
     'local_wb_dashboard_get_digits_data' => [
         'classname'   => 'local_wb_dashboard\external\get_digits_data',
         'description' => 'Return a single reduced value (number, count or percentage) for a digits field.',
         'type'        => 'read',
         'ajax'        => true,
+        'readonlysession' => true,
     ],
     'local_wb_dashboard_get_toplist_data' => [
         'classname'   => 'local_wb_dashboard\external\get_toplist_data',
         'description' => 'Return the ranked rows (label, value, bar percent) for a top-N list.',
         'type'        => 'read',
         'ajax'        => true,
+        'readonlysession' => true,
     ],
     'local_wb_dashboard_get_filter_options' => [
         'classname'   => 'local_wb_dashboard\external\get_filter_options',
         'description' => 'Return the dynamic options of a select filter, scoped by the current page filter values.',
         'type'        => 'read',
         'ajax'        => true,
+        'readonlysession' => true,
     ],
     'local_wb_dashboard_set_filter_state' => [
         'classname'   => 'local_wb_dashboard\external\set_filter_state',
