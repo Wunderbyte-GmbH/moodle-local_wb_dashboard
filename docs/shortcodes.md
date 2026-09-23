@@ -293,7 +293,7 @@ per-user cache, and fans out to every chart on the page that `consumes` the key.
 | `groupfield` | field name | — | **`groupedselect` only.** The field whose value groups the options (rendered as optgroups). |
 | `groups` | `GroupA=v:Label;v:Label\|\|GroupB=v` | — | **`groupedselect` only.** Static fallback used when `optionsfield`/`groupfield` yield nothing. |
 | `dependson` | filter key | — | **`groupedselect` only.** When that key is *locked* for the viewer, options are scoped to the matching group only. |
-| `cascadefrom` | filter key | — | **`select`/`groupedselect` with `optionsfield`.** Follow that filter live: whenever it changes, the options are re-fetched scoped by its value and the first one is auto-selected — see *Cascading select* below. |
+| `cascadefrom` | filter key, or a comma-separated list | — | **`select`/`groupedselect` with `optionsfield`.** Follow those filters live: whenever one changes, the options are re-fetched scoped by all of their values; a single remaining option is auto-selected and the control locked — see *Cascading select* below. |
 | `operator` | `eq`, `gte`, `lte` | `eq` | **`number` only.** Comparison used when applying the value. |
 | `hidewhenlocked` | `1` | — | Render nothing (instead of a static value) for users whose value for this key is locked. |
 
@@ -387,38 +387,60 @@ cascade add `cascadefrom=<key>` (see *Cascading select* below).
 ### Cascading select (`cascadefrom`)
 
 A `select` or `groupedselect` with dynamic options (`optionsfield`) can **follow
-another filter live**. With `cascadefrom=<key>`, every time that filter's value
-changes on the page:
+other filters live**. With `cascadefrom=<key>` — or `cascadefrom=<key>,<key>`
+for several — every time one of those filters changes on the page:
 
 1. the options are re-fetched from the control's own source/report, scoped by
-   the other filter's value (i.e. the distinct values of `optionsfield` among the
-   rows matching it — the value goes through the report's own filter, exactly as
-   for charts);
-2. the option list is rebuilt, and the control is set to its **first option**
-   (its current value is kept when it is still available);
-3. the new value is published like a user change, so charts consuming the key
+   **all** of those filters' current values at once (i.e. the distinct values of
+   `optionsfield` among the rows matching them — each value goes through the
+   report's own filter, exactly as for charts);
+2. the option list is rebuilt and the control's value settles:
+   - **exactly one option left** — it is selected and the control is **locked**
+     (disabled, `.wb-filter-cascadelocked`), because the other filters already
+     determine it;
+   - **several options left** — the list is merely narrowed: the control keeps
+     its current value when it is still offered, and is cleared when it is not;
+3. a changed value is published like a user change, so charts consuming the key
    reload.
 
-Clearing the other filter restores the full option list and clears the control.
-A page opened with the other filter already set (URL or remembered state) scopes
-the control on load in the same way.
+Clearing every parent restores the full option list and releases the lock,
+keeping the control's value when that value is still offered. A page opened with
+a parent already set (URL or remembered state) scopes the control on load in the
+same way.
 
 ```
-# Choosing a course sets the edition dropdown to that course's first edition.
+# Choosing a course narrows the edition dropdown to that course's editions,
+# and locks it when the course has only one.
 [chartfilter key=course  type=select label="Course"  optionsfield=course  report=42 pageid=ops]
 [chartfilter key=edition type=select label="Edition" optionsfield=edition report=42 cascadefrom=course pageid=ops]
 [chart ... consumes=course,edition ...]
 ```
 
+**Mutually linked filters.** Controls may cascade from each other: each one then
+narrows the others, and whichever filter pins the selection down to a single
+value locks them. Because a control only publishes when its value really
+changes, such a cycle settles instead of looping. The control the user picked
+from last is never locked, so two controls that narrow each other to one option
+cannot freeze each other — there is always one left to change (and the
+`[filterreset]` button clears everything).
+
+```
+# Region, ASL and user, all linked: an ASL settles its region, a user settles both.
+[chartfilter key=region type=select label="Region" optionsfield=region report=42 cascadefrom=asl,username    pageid=ops]
+[chartfilter key=asl    type=select label="ASL"    optionsfield=asl    report=42 cascadefrom=region,username pageid=ops]
+[chartfilter key=username type=select label="User" optionsfield=username report=42 cascadefrom=region,asl   pageid=ops]
+```
+
 Notes:
 
-- The control's report must have an **active filter** for the `cascadefrom` key;
-  otherwise the value cannot be applied and the options stay unscoped (the same
-  rule charts follow).
-- When the `cascadefrom` key is **locked** for the viewer, nothing happens on the
-  client: the locked value is applied server-side and the control is rendered
-  already scoped. `dependson` (locked-only, `groupedselect`) and `cascadefrom`
-  can therefore be combined on one control.
+- The control's report must have an **active filter** for every `cascadefrom`
+  key; otherwise that value cannot be applied and the options stay unscoped by
+  it (the same rule charts follow).
+- When a `cascadefrom` key is **locked** for the viewer, it is dropped from the
+  list: the locked value is applied server-side and the control is rendered
+  already scoped. A control whose parents are all locked emits no cascade JS at
+  all. `dependson` (locked-only, `groupedselect`) and `cascadefrom` can
+  therefore be combined on one control.
 - Static `options=`/`groups=` controls cannot cascade (there is nothing to
   re-fetch); the flag is ignored for them.
 - Locked filters are applied to the options lookup too, so a viewer never sees

@@ -91,3 +91,20 @@
 .local-dashboard-filter.wb-filter-active .local-dashboard-filter-label {
     text-shadow: 0 0 0.5rem var(--wb-filter-glow);
 }
+
+/* A cascading select whose parents leave exactly one option is disabled and
+ * marked with .wb-filter-cascadelocked (see amd/src/cascadeselect.js): the
+ * value is settled by another filter, so it reads as a statement rather than a
+ * control, while the glow above still shows it holds a value. The mark is put
+ * on every control of the key (filterbus markLocked), so a map sharing the key
+ * stops taking clicks as well. */
+.local-dashboard-filter.wb-filter-cascadelocked .form-select,
+.local-dashboard-filter.wb-filter-cascadelocked .custom-select {
+    background-color: transparent;
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+.local-dashboard-filter.wb-filter-cascadelocked .wb-region-map {
+    pointer-events: none;
+}

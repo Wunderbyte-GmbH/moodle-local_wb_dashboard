@@ -14,14 +14,27 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Cascading select: a select filter B that follows another filter A live.
+ * Cascading select: a select filter B that follows one or more other filters live.
  *
- * Whenever A's value changes on the bus, B's dynamic options are re-fetched
- * scoped by that value (get_filter_options web service), B's option list is
- * rebuilt and B is set to its first option (keeping its current value when
- * that is still available). The new value is published through the bus like
- * a user change, so charts consuming B reload. When A is cleared, the
- * server-rendered (unscoped) options are restored and B is cleared.
+ * Whenever any of its parents changes on the bus, B's dynamic options are
+ * re-fetched scoped by every parent value at once (get_filter_options web
+ * service) and B's option list is rebuilt. What happens to B's own value then
+ * depends on how narrow the scope is:
+ *
+ * - exactly one option left: it is selected and the control is locked
+ *   (disabled), because the parents already determine it — picking an ASL
+ *   settles its region, picking a user settles both. The control the user
+ *   just picked from is never locked, so mutually linked controls cannot
+ *   freeze each other;
+ * - several options left: the list is merely narrowed. B keeps its value when
+ *   it is still offered and is cleared when it is not, so the user still
+ *   chooses freely inside the scope;
+ * - no parent set at all: the server-rendered (unscoped) options are restored,
+ *   again keeping B's value when it survives.
+ *
+ * Any value the module picks is published through the bus like a user change,
+ * so charts consuming B reload. Parents may cascade from B in turn (mutual
+ * linking): publishing only on a real change makes such a cycle settle.
  *
  * The module owns nothing but the A -> B wiring; the bus still handles B's
  * own change events, URL state and persistence.
@@ -96,46 +109,20 @@ const rebuild = (select, result) => {
 };
 
 /**
- * The value of the first real (non-placeholder) option, '' when there is none.
+ * The real (non-placeholder) option values currently offered.
  *
  * @param {HTMLSelectElement} select
- * @return {String}
+ * @return {String[]}
  */
-const firstValue = (select) => {
-    const option = Array.from(select.options).find((node) => node.value !== '');
-    return option ? option.value : '';
-};
-
-/**
- * Whether the select currently offers the given non-empty value.
- *
- * @param {HTMLSelectElement} select
- * @param {String} value
- * @return {Boolean}
- */
-const offers = (select, value) =>
-    value !== '' && Array.from(select.options).some((node) => node.value === value);
-
-/**
- * Toggle the loading state on the control.
- *
- * @param {HTMLSelectElement} select
- * @param {Boolean} busy
- */
-const setBusy = (select, busy) => {
-    select.disabled = busy;
-    if (busy) {
-        select.setAttribute('aria-busy', 'true');
-    } else {
-        select.removeAttribute('aria-busy');
-    }
-};
+const offered = (select) => Array.from(select.options)
+    .map((node) => node.value)
+    .filter((value) => value !== '');
 
 export default {
     /**
-     * Wire a select control (by id) to the filter it cascades from. The
-     * wrapper carries data-cascadefrom (the parent key) and data-optionsargs
-     * (JSON web-service args to re-fetch the options).
+     * Wire a select control (by id) to the filters it cascades from. The
+     * wrapper carries data-cascadefrom (the parent keys, comma separated) and
+     * data-optionsargs (JSON web-service args to re-fetch the options).
      *
      * @param {String} controlId
      */
@@ -150,26 +137,57 @@ export default {
         }
         wrapper.dataset.cascadeInitialised = '1';
 
-        const parentKey = wrapper.dataset.cascadefrom || '';
+        const keys = (wrapper.dataset.filterKeys || wrapper.dataset.filterKey || '')
+            .split(',').filter(Boolean);
+        if (!keys.length) {
+            return;
+        }
+        // A control never scopes itself, whichever key of its own is named.
+        const parentKeys = (wrapper.dataset.cascadefrom || '')
+            .split(',').filter((key) => key !== '' && keys.indexOf(key) === -1);
         let wsargs = {};
         try {
             wsargs = JSON.parse(wrapper.dataset.optionsargs || '{}');
         } catch (e) {
             return;
         }
-        if (parentKey === '' || !wsargs.source) {
-            return;
-        }
-        const keys = (wrapper.dataset.filterKeys || wrapper.dataset.filterKey || '')
-            .split(',').filter(Boolean);
-        if (!keys.length) {
+        if (!parentKeys.length || !wsargs.source) {
             return;
         }
 
         // The server-rendered options are the unscoped list: keep a copy to
-        // restore when the parent is cleared, without another request.
+        // restore when no parent is set, without another request.
         const unscoped = Array.from(select.children).slice(1).map((node) => node.cloneNode(true));
         let requestToken = 0;
+        let locked = false;
+
+        /**
+         * Lock (disable) the control while its parents fully determine it, or
+         * release it again.
+         *
+         * @param {Boolean} value
+         */
+        const setLocked = (value) => {
+            locked = value;
+            select.disabled = value;
+            // Every control of these keys carries the mark, not just this one:
+            // a map bound to the same key must refuse clicks while it holds.
+            Filterbus.markLocked(keys, value);
+        };
+
+        /**
+         * Toggle the loading state on the control, leaving a lock in place.
+         *
+         * @param {Boolean} busy
+         */
+        const setBusy = (busy) => {
+            select.disabled = busy || locked;
+            if (busy) {
+                select.setAttribute('aria-busy', 'true');
+            } else {
+                select.removeAttribute('aria-busy');
+            }
+        };
 
         /**
          * Select a value and publish it on the bus if it is not already there.
@@ -184,27 +202,55 @@ export default {
         };
 
         /**
-         * React to the parent's current value.
+         * Whether the user's own last choice was this very control. Two
+         * controls that scope each other can both end up with a single option;
+         * leaving the one the user just picked unlocked keeps a way out of
+         * that state without resetting every filter.
          *
-         * @param {String} parentValue
+         * @return {Boolean}
          */
-        const apply = (parentValue) => {
+        const ownsLastUserChange = () =>
+            Filterbus.lastUserKeys().some((key) => keys.indexOf(key) !== -1);
+
+        /**
+         * Keep the control's current value when the new option list still
+         * offers it, lock it to the only option left, or clear it.
+         *
+         * @param {Boolean} scoped Whether at least one parent is set.
+         */
+        const settleWithin = (scoped) => {
+            const values = offered(select);
+            if (scoped && values.length === 1 && !ownsLastUserChange()) {
+                setLocked(true);
+                settle(values[0]);
+                return;
+            }
+            setLocked(false);
+            const current = busValue(keys);
+            settle(values.indexOf(current) === -1 ? '' : current);
+        };
+
+        /**
+         * React to the parents' current values.
+         */
+        const apply = () => {
             const token = ++requestToken; // Also supersedes any in-flight fetch.
-            if (parentValue === '') {
+            const filtervalues = Filterbus.valuesFor(parentKeys);
+            if (!filtervalues.length) {
                 clearOptions(select);
                 unscoped.forEach((node) => select.appendChild(node.cloneNode(true)));
-                setBusy(select, false);
-                settle('');
+                setBusy(false);
+                settleWithin(false);
                 return;
             }
 
-            setBusy(select, true);
+            setBusy(true);
             const args = {
                 source: wsargs.source,
                 sourceparams: wsargs.sourceparams || [],
                 field: wsargs.field || '',
                 groupfield: wsargs.groupfield || '',
-                filtervalues: Filterbus.valuesFor([parentKey])
+                filtervalues: filtervalues
             };
             Ajax.call([{methodname: 'local_wb_dashboard_get_filter_options', args: args}])[0]
                 .then((result) => {
@@ -212,29 +258,26 @@ export default {
                         return null; // A newer request superseded this one.
                     }
                     rebuild(select, result);
-                    setBusy(select, false);
-                    const current = busValue(keys);
-                    settle(offers(select, current) ? current : firstValue(select));
+                    setBusy(false);
+                    settleWithin(true);
                     return null;
                 })
                 .catch((error) => {
                     if (token === requestToken) {
-                        setBusy(select, false);
+                        setBusy(false);
                     }
                     Notification.exception(error);
                 });
         };
 
-        const parentValue = () => busValue([parentKey]);
-
-        Filterbus.subscribe({reload: () => apply(parentValue())}, [parentKey]);
+        Filterbus.subscribe({reload: () => apply()}, parentKeys);
 
         // Initial pass once every control on the page has registered with the
-        // bus (the parent may come later in the content): a parent already set
+        // bus (a parent may come later in the content): a parent already set
         // from the URL or cached state scopes us right away.
         window.setTimeout(() => {
-            if (parentValue() !== '') {
-                apply(parentValue());
+            if (Filterbus.valuesFor(parentKeys).length) {
+                apply();
             }
         }, 0);
     }

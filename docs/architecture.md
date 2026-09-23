@@ -57,16 +57,21 @@ cache) used both by the server-side render and by the
 constraints, which the source applies natively (Report Builder: `load_rows()`
 with the report's own filters) before scanning distinct values.
 
-**Cascading select** (`cascadefrom=<key>` on a select/groupedselect): the
-`cascadeselect` AMD module subscribes to the bus for the parent key like a
-chart does. On change it calls `get_filter_options` with the parent's current
+**Cascading select** (`cascadefrom=<key>[,<key>…]` on a select/groupedselect):
+the `cascadeselect` AMD module subscribes to the bus for its parent keys like a
+chart does. On change it calls `get_filter_options` with every parent's current
 value (translated through `pipeline::build_constraints()`, so locked filters
-win), rebuilds the `<option>`s, picks the first one (or keeps the current value
-when still offered) and publishes it via `filterbus.setValue()` — which runs the
-normal change path (sibling sync, URL, persistence, chart reloads). Clearing the
-parent restores the server-rendered options and clears the control. When the
-parent key is locked for the viewer no JS is emitted: the render is already
-scoped server-side.
+win), rebuilds the `<option>`s and settles its value: a single remaining option
+is selected and the control disabled (`.wb-filter-cascadelocked`), otherwise the
+current value is kept when still offered and cleared when not. A changed value
+is published via `filterbus.setValue()` — which runs the normal change path
+(sibling sync, URL, persistence, chart reloads). Clearing every parent restores
+the server-rendered options and releases the lock. Controls may cascade from
+each other; publishing only on a real change is what makes such a cycle settle,
+and a control whose own key is the bus's `lastUserKeys()` never locks itself, so
+two controls that narrow each other to one option cannot freeze each other.
+Locked parent keys are dropped from the list (their value is already applied
+server-side), and a control whose parents are all locked emits no JS at all.
 
 Constraint contract for sources: `OP_BETWEEN` always carries a two-element
 `[min, max]` value where `0` means "unbounded on that side" (the `daterange`

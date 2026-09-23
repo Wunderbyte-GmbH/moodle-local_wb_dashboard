@@ -49,8 +49,22 @@ use local_wb_dashboard\local\source\shaping\shaper;
  */
 class reportbuilder_source implements aggregating_source, grouped_option_provider_interface, option_provider_interface,
         shapable_source {
-    /** @var int Cap for options derived by scanning report rows. */
+    /** @var int Default cap for options derived by scanning report rows. */
     private const MAX_DYNAMIC_OPTIONS = 500;
+
+    /**
+     * How many distinct options a row scan may collect before it stops.
+     *
+     * A dropdown over a large population (every user of a site, say) needs a
+     * higher cap than the default, so the maxfilteroptions admin setting
+     * raises or lowers it; a missing or nonsensical value keeps the default.
+     *
+     * @return int
+     */
+    private function max_options(): int {
+        $configured = (int)get_config('local_wb_dashboard', 'maxfilteroptions');
+        return $configured > 0 ? $configured : self::MAX_DYNAMIC_OPTIONS;
+    }
 
     #[\Override]
     public static function get_name(): string {
@@ -224,7 +238,7 @@ class reportbuilder_source implements aggregating_source, grouped_option_provide
                 continue;
             }
             $values[$value] = $value;
-            if (count($values) >= self::MAX_DYNAMIC_OPTIONS) {
+            if (count($values) >= $this->max_options()) {
                 break;
             }
         }
@@ -268,7 +282,7 @@ class reportbuilder_source implements aggregating_source, grouped_option_provide
                     continue;
                 }
                 $groups[$group][$value] = $value;
-                if (++$count >= self::MAX_DYNAMIC_OPTIONS) {
+                if (++$count >= $this->max_options()) {
                     break 2;
                 }
             }

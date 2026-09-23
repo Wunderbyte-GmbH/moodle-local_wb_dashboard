@@ -66,6 +66,10 @@ const reflect = (input, paths, readout) => {
  * @param {Element} path The activated region.
  */
 const activate = (input, paths, readout, path) => {
+    const wrapper = input.closest('[data-region="chart-filter"]');
+    if (wrapper && wrapper.classList.contains(Filterbus.lockedClass)) {
+        return; // Another filter currently settles this key (see cascadeselect).
+    }
     const value = path.dataset.value;
     input.value = (input.value === value) ? '' : value;
     reflect(input, paths, readout);

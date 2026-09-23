@@ -199,16 +199,18 @@ class shortcodes {
         $context['isnumber'] = !$islocked && ($definition->type === 'number');
         $context['ismap'] = !$islocked && ($definition->type === 'map');
 
-        // Live cascade (cascadefrom=<key>): only a free select with dynamic
-        // options can follow another filter, and only when that filter is not
+        // Live cascade (cascadefrom=<key>[,<key>...]): only a free select with
+        // dynamic options can follow other filters, and only those that are not
         // locked for the viewer — a locked key is already applied server-side
-        // and never changes on the client.
-        $cascadefrom = (string)($context['cascadefrom'] ?? '');
-        $cancascade = $cascadefrom !== ''
+        // and never changes on the client, so it is dropped from the list.
+        $parents = array_filter(
+            array_filter(array_map('trim', explode(',', (string)($context['cascadefrom'] ?? '')))),
+            static fn(string $key): bool => !isset($lockedvalues[$key])
+        );
+        $cancascade = !empty($parents)
             && ($context['isselect'] || $context['isgroupedselect'])
-            && (string)($context['optionsargs'] ?? '') !== ''
-            && !isset($lockedvalues[$cascadefrom]);
-        $context['cascadefrom'] = $cancascade ? $cascadefrom : '';
+            && (string)($context['optionsargs'] ?? '') !== '';
+        $context['cascadefrom'] = $cancascade ? implode(',', $parents) : '';
         $context['optionsargs'] = $cancascade ? (string)$context['optionsargs'] : '';
 
         return $OUTPUT->render_from_template('local_wb_dashboard/chartfilter', $context);

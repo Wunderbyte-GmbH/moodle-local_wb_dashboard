@@ -57,6 +57,17 @@ if ($hassiteconfig) {
         PARAM_RAW
     ));
 
+    // How many options a dynamic select filter may collect by scanning report
+    // rows. Raise it for dropdowns over a large population (e.g. every user of
+    // the site), where the default would silently truncate the list.
+    $settings->add(new admin_setting_configtext(
+        'local_wb_dashboard/maxfilteroptions',
+        get_string('settings:maxfilteroptions', 'local_wb_dashboard'),
+        get_string('settings:maxfilteroptions_desc', 'local_wb_dashboard'),
+        500,
+        PARAM_INT
+    ));
+
     // Named detail templates: the modal bodies opened by the [toplist]
     // shortcode's per-row "see details" links (details=<name>).
     $settings->add(new admin_setting_configtextarea(

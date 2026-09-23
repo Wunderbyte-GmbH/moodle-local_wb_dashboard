@@ -29,11 +29,12 @@ use renderer_base;
  * defaulting to reportbuilder). Static options act as the fallback whenever the
  * dynamic lookup yields nothing (unknown source, no permission, empty data).
  *
- * With cascadefrom="<key>" the control follows another filter live: the client
- * re-fetches the dynamic options scoped by that filter's current value (see
- * the cascadeselect AMD module and the get_filter_options web service) and
- * auto-selects the first one. Server-side, a dependent control's options are
- * scoped by the viewer's locked filters only.
+ * With cascadefrom="<key>" — or a comma-separated list — the control follows
+ * those filters live: the client re-fetches the dynamic options scoped by their
+ * current values (see the cascadeselect AMD module and the get_filter_options
+ * web service), auto-selecting and locking the control when a single option is
+ * left. Server-side, a dependent control's options are scoped by the viewer's
+ * locked filters only.
  *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
@@ -65,7 +66,7 @@ class select_filter extends base_filter {
         $context['optionsargs'] = $resolved === null
             ? ''
             : json_encode(dynamic_options::wsargs($resolved, $this->options_field()));
-        $context['cascadefrom'] = $this->get_cascade_key();
+        $context['cascadefrom'] = implode(',', $this->get_cascade_keys());
         return $context;
     }
 

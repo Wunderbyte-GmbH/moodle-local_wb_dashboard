@@ -36,8 +36,8 @@ use renderer_base;
  * unscoped admin sees every region's ASLs grouped. A single resulting group is
  * rendered flat (no optgroup wrapper).
  *
- * With cascadefrom="region" the control additionally follows the region filter
- * live on the client (see {@see select_filter}).
+ * With cascadefrom="region" (or a comma-separated list of keys) the control
+ * additionally follows those filters live on the client (see {@see select_filter}).
  *
  * @package    local_wb_dashboard
  * @copyright  2026 Wunderbyte GmbH
@@ -83,7 +83,7 @@ class grouped_select_filter extends base_filter {
         $context['optionsargs'] = $resolved === null
             ? ''
             : json_encode(dynamic_options::wsargs($resolved, $this->value_field(), $this->group_field()));
-        $context['cascadefrom'] = $this->get_cascade_key();
+        $context['cascadefrom'] = implode(',', $this->get_cascade_keys());
         return $context;
     }
 

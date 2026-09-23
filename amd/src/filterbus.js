@@ -28,6 +28,7 @@ import Ajax from 'core/ajax';
 const URL_PREFIX = 'ldf_';
 const DEBOUNCE_MS = 300;
 const ACTIVE_CLASS = 'wb-filter-active';
+const LOCKED_CLASS = 'wb-filter-cascadelocked';
 
 /**
  * Events dispatched on registered control elements. Exposed on the default
@@ -48,6 +49,9 @@ const controls = {};
 let pageid = 'default';
 let urlLoaded = false;
 let persistTimer = null;
+// The keys of the control the user changed last by hand (not the ones a
+// dependent control set on their behalf) — see lastUserKeys().
+let lastUserKeys = [];
 
 /**
  * Read the ldf_* params from the URL once into state (values only; types are
@@ -195,6 +199,30 @@ const debounce = (fn, wait) => {
 export default {
     eventTypes: eventTypes,
 
+    /** @type {String} Wrapper class marking a key another filter currently settles. */
+    lockedClass: LOCKED_CLASS,
+
+    /**
+     * Mark (or release) every control registered for the given keys as settled
+     * by another filter. A key may be served by several controls — a region
+     * select and the region map, say — so the mark belongs to the key, not to
+     * the control that discovered it; each widget decides what to do with it
+     * (a select disables itself, the map refuses activation).
+     *
+     * @param {String[]} keys
+     * @param {Boolean} locked
+     */
+    markLocked: (keys, locked) => {
+        keys.forEach((key) => {
+            (controls[key] || []).forEach((control) => {
+                const wrapper = control.closest('[data-region="chart-filter"]');
+                if (wrapper) {
+                    wrapper.classList.toggle(LOCKED_CLASS, locked);
+                }
+            });
+        });
+    },
+
     /**
      * Register a filter control element (by id) with the bus. Several controls
      * may register the same key; they act as one filter and are kept in sync.
@@ -244,7 +272,10 @@ export default {
             controls[key].push(control);
         });
 
-        const onChange = debounce(() => handleChange(keys, type, control.value, control), DEBOUNCE_MS);
+        const onChange = debounce(() => {
+            lastUserKeys = keys;
+            handleChange(keys, type, control.value, control);
+        }, DEBOUNCE_MS);
         control.addEventListener('change', onChange);
         control.addEventListener('input', onChange);
     },
@@ -265,6 +296,7 @@ export default {
      */
     reset: () => {
         ensureUrlLoaded();
+        lastUserKeys = [];
         const keys = Object.keys(state);
         keys.forEach((key) => {
             state[key] = {value: '', type: state[key].type};
@@ -310,6 +342,17 @@ export default {
         control.value = value;
         handleChange(keys, wrapper.dataset.filterType, value, control);
     },
+
+    /**
+     * The keys of the control the user last changed by hand. A value a
+     * dependent control picked on the user's behalf (setValue) does not count,
+     * so a cascading control can tell "the user chose me" from "another filter
+     * settled me" — which is what keeps two mutually linked controls from
+     * locking each other at once.
+     *
+     * @return {String[]}
+     */
+    lastUserKeys: () => lastUserKeys.slice(),
 
     /**
      * Return the current {key, type, value} triples for the given keys

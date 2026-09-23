@@ -67,14 +67,21 @@ abstract class base_filter implements filter_interface {
     }
 
     /**
-     * The key of the filter this control's options follow live (cascadefrom=…),
-     * or '' when the control is independent. A control cannot cascade from itself.
+     * The keys of the filters this control's options follow live
+     * (cascadefrom=…, comma separated for several), empty when the control is
+     * independent. A control cannot cascade from itself; duplicates are dropped.
      *
-     * @return string
+     * @return string[]
      */
-    public function get_cascade_key(): string {
-        $key = clean_param(trim((string)($this->config['cascadefrom'] ?? '')), PARAM_ALPHANUMEXT);
-        return $key === $this->key ? '' : $key;
+    public function get_cascade_keys(): array {
+        $keys = [];
+        foreach (explode(',', (string)($this->config['cascadefrom'] ?? '')) as $raw) {
+            $key = clean_param(trim($raw), PARAM_ALPHANUMEXT);
+            if ($key !== '' && $key !== $this->key) {
+                $keys[$key] = $key;
+            }
+        }
+        return array_values($keys);
     }
 
     /**
@@ -85,7 +92,7 @@ abstract class base_filter implements filter_interface {
      * @return bool
      */
     protected function is_dependent(): bool {
-        return $this->get_cascade_key() !== '' || trim((string)($this->config['dependson'] ?? '')) !== '';
+        return !empty($this->get_cascade_keys()) || trim((string)($this->config['dependson'] ?? '')) !== '';
     }
 
     #[\Override]

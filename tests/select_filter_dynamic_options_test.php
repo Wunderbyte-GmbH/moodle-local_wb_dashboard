@@ -234,4 +234,33 @@ final class select_filter_dynamic_options_test extends \advanced_testcase {
         $this->assertSame('', $context['optionsargs']);
         $this->assertSame('', $context['cascadefrom']);
     }
+
+    public function test_cascading_select_exports_several_parent_keys(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        global $PAGE;
+        $reportid = $this->build_names_report();
+
+        // Several parents: whitespace and duplicates are cleaned away, the
+        // control's own key is dropped (it never scopes itself), and the rest
+        // reach the template as one comma-separated list.
+        $filter = filter_factory::create('select', 'lastname', [
+            'report' => (string)$reportid,
+            'optionsfield' => 'lastname',
+            'cascadefrom' => ' firstname , city ,firstname, lastname ',
+        ]);
+        $context = $filter->export_for_template($PAGE->get_renderer('core'));
+
+        $this->assertSame('firstname,city', $context['cascadefrom']);
+        $this->assertNotSame('', $context['optionsargs']);
+
+        // A list naming nothing but the control's own key leaves no parent.
+        $self = filter_factory::create('select', 'lastname', [
+            'report' => (string)$reportid,
+            'optionsfield' => 'lastname',
+            'cascadefrom' => 'lastname,lastname',
+        ]);
+        $context = $self->export_for_template($PAGE->get_renderer('core'));
+        $this->assertSame('', $context['cascadefrom']);
+    }
 }

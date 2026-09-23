@@ -289,6 +289,12 @@ final class locked_filters_test extends \advanced_testcase {
         $static = ['key' => 'name', 'type' => 'select', 'options' => 'a:A,b:B', 'cascadefrom' => 'region'];
         $html = shortcodes::chartfilter('chartfilter', $static, null, $env, $next);
         $this->assertStringNotContainsString('data-cascadefrom', $html);
+
+        // Several parents: a locked one drops out of the list, the free ones stay.
+        $args['cascadefrom'] = 'region,lastname';
+        $this->setUser($this->getDataGenerator()->create_user(['profile_field_region' => 'south']));
+        $html = shortcodes::chartfilter('chartfilter', $args, null, $env, $next);
+        $this->assertStringContainsString('data-cascadefrom="lastname"', $html);
     }
 
     public function test_pipeline_leaves_exempt_users_untouched(): void {
