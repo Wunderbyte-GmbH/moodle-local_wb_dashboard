@@ -153,6 +153,45 @@ final class external_get_chart_data_test extends \advanced_testcase {
         $this->assertSame(['Ann One'], $config['data']['labels']);
     }
 
+    public function test_filter_matching_no_rows_returns_nodata(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $this->getDataGenerator()->create_custom_profile_field([
+            'shortname' => 'region',
+            'name' => 'Region',
+            'datatype' => 'text',
+        ]);
+        $this->getDataGenerator()->create_user([
+            'firstname' => 'Ann',
+            'lastname' => 'One',
+            'profile_field_region' => 'LAZIO',
+        ]);
+
+        /** @var generator $rbgenerator */
+        $rbgenerator = $this->getDataGenerator()->get_plugin_generator('core_reportbuilder');
+        $report = $rbgenerator->create_report(['name' => 'Regions', 'source' => users::class, 'default' => 0]);
+        $rbgenerator->create_column(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:fullname']);
+        $rbgenerator->create_filter(['reportid' => $report->get('id'), 'uniqueidentifier' => 'user:profilefield_region']);
+
+        // A filter value no user carries empties the report: an empty state, not an error.
+        $result = get_chart_data::execute(
+            'reportbuilder',
+            'bar',
+            $this->pairs([
+                'report' => $report->get('id'),
+                'categoryfield' => 'user:fullname',
+                'aggregation' => 'count',
+            ]),
+            [['key' => 'region', 'type' => 'map', 'value' => 'NOWHERE']],
+            '',
+            ''
+        );
+
+        $this->assertTrue($result['nodata']);
+        $this->assertSame('', $result['payload']);
+    }
+
     public function test_unknown_source_throws(): void {
         $this->resetAfterTest();
         $this->setAdminUser();

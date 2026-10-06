@@ -37,6 +37,7 @@ $string['cachedef_chartdata'] = 'Aufbereitete Diagrammdaten';
 $string['cachedef_filteroptions'] = 'Dynamische Filter-Auswahloptionen';
 $string['cachedef_pagefilterstate'] = 'Seitenfilter-Status pro Nutzer/in';
 $string['chart'] = 'Diagramm';
+$string['chart:nodata'] = 'Keine Daten für die aktuellen Filter.';
 $string['chartsettings:colourslot'] = 'Farbe {$a}';
 $string['chartsettings:gear'] = 'Farbeinstellungen';
 $string['chartsettings:intro'] = 'Wählen Sie, welche Palettenfarbe jeder Platz verwendet. Plätze, die auf ihrem Standard belassen werden, folgen weiterhin der aktiven Palette.';

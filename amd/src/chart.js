@@ -108,6 +108,7 @@ const JS_PLUGINS = {
  */
 const createController = (canvas) => {
     const skeleton = canvas.previousElementSibling;
+    const emptyEl = canvas.parentElement.querySelector('[data-region="chart-empty"]');
     const wsargs = JSON.parse(canvas.dataset.wsargs || '{}');
     const consumes = JSON.parse(canvas.dataset.consumes || '[]');
     // Fixed filter values pinned on this instance; they always win over the
@@ -119,6 +120,7 @@ const createController = (canvas) => {
     const setBusy = (busy) => {
         canvas.setAttribute('aria-busy', busy ? 'true' : 'false');
         if (busy) {
+            showEmpty(false);
             if (skeleton) {
                 skeleton.style.display = '';
             }
@@ -131,11 +133,22 @@ const createController = (canvas) => {
         }
     };
 
-    const draw = (config) => {
+    const destroyExisting = () => {
         const existing = (typeof Chart.getChart === 'function') ? Chart.getChart(canvas) : null;
         if (existing) {
             existing.destroy();
         }
+    };
+
+    const showEmpty = (empty) => {
+        if (emptyEl) {
+            emptyEl.style.display = empty ? '' : 'none';
+        }
+    };
+
+    const draw = (config) => {
+        destroyExisting();
+        showEmpty(false);
         const plugins = (config.plugins || [])
             .filter((name) => Object.prototype.hasOwnProperty.call(JS_PLUGINS, name))
             .map((name) => JS_PLUGINS[name](config));
@@ -167,6 +180,14 @@ const createController = (canvas) => {
             .then((result) => {
                 if (token !== requestToken) {
                     return null; // A newer request superseded this one.
+                }
+                if (result.nodata) {
+                    // Nothing matched the current filters: show the notice, not a chart.
+                    destroyExisting();
+                    setBusy(false);
+                    canvas.style.display = 'none';
+                    showEmpty(true);
+                    return null;
                 }
                 draw(JSON.parse(result.payload));
                 return null;

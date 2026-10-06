@@ -37,6 +37,7 @@ $string['cachedef_chartdata'] = 'Shaped chart data';
 $string['cachedef_filteroptions'] = 'Dynamic filter dropdown options';
 $string['cachedef_pagefilterstate'] = 'Per-user page filter state';
 $string['chart'] = 'Chart';
+$string['chart:nodata'] = 'No data for the current filters.';
 $string['chartsettings:colourslot'] = 'Colour {$a}';
 $string['chartsettings:gear'] = 'Colour settings';
 $string['chartsettings:intro'] = 'Choose which palette colour each slot uses. Slots left on their default keep following the active palette.';

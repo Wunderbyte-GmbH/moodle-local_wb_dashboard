@@ -25,6 +25,7 @@ use core_external\external_value;
 use local_wb_dashboard\local\chart\chart_director;
 use local_wb_dashboard\local\settings\chart_settings;
 use local_wb_dashboard\local\source\pipeline;
+use moodle_exception;
 
 /**
  * Return the fully-built chart configuration for a chart definition.
@@ -115,7 +116,16 @@ class get_chart_data extends external_api {
 
         // Fetch normalized data (source resolve + authz + filters), then build
         // the FULL chart config.
-        $dto = pipeline::fetch($params['source'], $params['sourceparams'], $params['filtervalues']);
+        // A report that ran but matched no rows leaves nothing to draw; tell
+        // the client so it shows its empty state instead of an error.
+        try {
+            $dto = pipeline::fetch($params['source'], $params['sourceparams'], $params['filtervalues']);
+        } catch (moodle_exception $e) {
+            if ($e->errorcode !== 'error:noreportdata') {
+                throw $e;
+            }
+            return ['payload' => '', 'nodata' => true];
+        }
 
         // Per-chart stored overrides (set via the settings gear) merged over the
         // active palette; unset slots follow the palette.
@@ -128,7 +138,7 @@ class get_chart_data extends external_api {
             'target' => $params['target'],
         ]);
 
-        return ['payload' => json_encode($config->jsonSerialize())];
+        return ['payload' => json_encode($config->jsonSerialize()), 'nodata' => false];
     }
 
     /**
@@ -138,7 +148,8 @@ class get_chart_data extends external_api {
      */
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
-            'payload' => new external_value(PARAM_RAW, 'JSON-encoded, sanitized Chart.js config'),
+            'payload' => new external_value(PARAM_RAW, 'JSON-encoded, sanitized Chart.js config (empty when nodata)'),
+            'nodata' => new external_value(PARAM_BOOL, 'True when the source matched no rows for the current filters'),
         ]);
     }
 }

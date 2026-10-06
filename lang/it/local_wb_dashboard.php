@@ -37,6 +37,7 @@ $string['cachedef_chartdata'] = 'Dati dei grafici elaborati';
 $string['cachedef_filteroptions'] = 'Opzioni dinamiche dei menu dei filtri';
 $string['cachedef_pagefilterstate'] = 'Stato dei filtri di pagina per utente';
 $string['chart'] = 'Grafico';
+$string['chart:nodata'] = 'Nessun dato per i filtri correnti.';
 $string['chartsettings:colourslot'] = 'Colore {$a}';
 $string['chartsettings:gear'] = 'Impostazioni colori';
 $string['chartsettings:intro'] = 'Scegli quale colore della tavolozza usa ciascuna posizione. Le posizioni lasciate al valore predefinito continuano a seguire la tavolozza attiva.';
