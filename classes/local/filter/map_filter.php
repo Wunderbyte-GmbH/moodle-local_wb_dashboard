@@ -31,7 +31,7 @@ use renderer_base;
  * dataset stores the region under a different string.
  *
  * Note: Trentino-Alto Adige is rendered as its two autonomous provinces,
- * emitting "TRENTINO" and "ALTO ADIGE" respectively — there is no combined
+ * emitting "TRENTO" and "BOLZANO" respectively — there is no combined
  * "TRENTINO-ALTO ADIGE" shape on the map. Geometry is derived from the ISTAT
  * administrative boundaries (via openpolis/geojson-italy), Mercator-projected
  * into the 1000x1150 viewBox.
